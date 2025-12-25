@@ -1,0 +1,67 @@
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { rateLimit } from "@/lib/rateLimit";
+
+// // 🔐 Restricted routes (invited admin only)
+// const isProtectedRoute = createRouteMatcher([
+//   "/dashboard/:path*",
+//   "/api/knowledge/ingest/:path*",
+// ]);
+
+// // 🌍 Public RAG query route (rate-limited)
+// const isPublicQueryRoute = createRouteMatcher([
+//   "/api/knowledge/query",
+// ]);
+
+// export default clerkMiddleware(async (auth, req: NextRequest) => {
+//   // const { pathname } = req.nextUrl;
+
+//   /* ───────────────────────────────────────
+//      1️⃣ PUBLIC QUERY → RATE LIMIT (NO AUTH)
+//      ─────────────────────────────────────── */
+//   if (isPublicQueryRoute(req)) {
+//     const ip =
+//       req.headers.get("x-forwarded-for")?.split(",")[0] ??
+//       req.headers.get("x-real-ip") ??
+//       "anonymous";
+
+//     const { success } = await rateLimit.limit(ip);
+
+//     if (!success) {
+//       return new NextResponse(
+//         JSON.stringify({ error: "Too many requests" }),
+//         {
+//           status: 429,
+//           headers: { "Content-Type": "application/json" },
+//         }
+//       );
+//     }
+
+//     // ❗ DO NOT call auth.protect()
+//     return NextResponse.next();
+//   }
+
+//   /* ───────────────────────────────────────
+//      2️⃣ RESTRICTED ROUTES → CLERK PROTECT
+//      ─────────────────────────────────────── */
+//   if (isProtectedRoute(req)) {
+//     await auth.protect();
+//     return NextResponse.next();
+//   }
+
+//   /* ───────────────────────────────────────
+//      3️⃣ EVERYTHING ELSE → ALLOW
+//      ─────────────────────────────────────── */
+//   return NextResponse.next();
+// });
+
+  
+
+export const config = {
+  matcher: [
+    // Skip Next.js internals and all static files, unless found in search params
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    // Always run for API routes
+    '/(api|trpc)(.*)',
+  ],
+}
