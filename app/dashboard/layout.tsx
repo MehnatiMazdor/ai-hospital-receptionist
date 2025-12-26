@@ -1,7 +1,3 @@
-
-
-export const LayoutDDashboard = () => {
-  return (
-    <div>LayoutDDashboard</div>
-  )
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>
 }
