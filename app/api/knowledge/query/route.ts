@@ -12,14 +12,15 @@ export const runtime = 'nodejs';
 
 
 export async function POST(request: NextRequest) {
-  try {
-    const { query } = await request.json();
+  const { query } = await request.json();
 
     // 1️⃣ Validate query
     if (!query || typeof query !== 'string') {
       return NextResponse.json({ error: 'Missing query' }, { status: 400 });
     }
 
+
+    
     if (query.length > 500) {
       return NextResponse.json(
         { error: 'Query too long (max 5–6 lines)' },
@@ -37,6 +38,13 @@ export async function POST(request: NextRequest) {
       },
       fields: ['text', /*'category', 'page' */],
     });
+
+    console.log('Pinecone search response:', response);
+
+
+  try {
+    
+
 
     const hits = response.result.hits;
 
