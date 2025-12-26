@@ -8,6 +8,9 @@ interface ChunkFields {
   page?: number;
 }
 
+export const runtime = 'nodejs';
+
+
 export async function POST(request: NextRequest) {
   try {
     const { query } = await request.json();
