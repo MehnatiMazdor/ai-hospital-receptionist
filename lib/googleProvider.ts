@@ -15,7 +15,7 @@ export async function generateHospitalAnswer(
   context: string
 ): Promise<string> {
   const response = await ai.models.generateContent({
-    model: "gemini-1.5-pro", // ✅ stable + supported
+    model: "gemini-2.5-flash", // ✅ stable + supported
     contents: [
       {
         role: "user",

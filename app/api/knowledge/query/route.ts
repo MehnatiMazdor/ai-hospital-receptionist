@@ -12,7 +12,9 @@ export const runtime = 'nodejs';
 
 
 export async function POST(request: NextRequest) {
-  const { query } = await request.json();
+
+  try {
+    const { query } = await request.json();
 
     // 1️⃣ Validate query
     if (!query || typeof query !== 'string') {
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     const response = await hospitalNamespace.searchRecords({
       query: {
-        topK: 3,
+        topK: 2,
         inputs: { text: query },
       },
       fields: ['text', /*'category', 'page' */],
@@ -41,9 +43,6 @@ export async function POST(request: NextRequest) {
 
     console.log('Pinecone search response:', response);
 
-
-  try {
-    
 
 
     const hits = response.result.hits;
