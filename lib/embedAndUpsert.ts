@@ -17,13 +17,13 @@ export const embedAndUpsert = async (
 
   console.log(`Split into ${chunks.length} chunks.`);
   console.log("Chunks is:", chunks);
+  // console.log("Chunk metadata inner pdf object is:", chunks[0].metadata.pdf);
 
   // Prepare the data for upsertion
   const vectorsRecords = chunks.map((chunk, idx) => ({
     id: `${namespace}-chunk-${idx}`,
     text: chunk.pageContent,
-    page: chunk.metadata.page || null,
-    category: namespace,
+    category: chunk.metadata.info?.Producer || "unknown",
   }));
 
   console.log("Vectors Records is:", vectorsRecords);
