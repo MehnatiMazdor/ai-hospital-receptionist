@@ -7,7 +7,7 @@ import { generateText } from "ai";
  * @param context retrieved pinecone chunks (already filtered)
  */
 export async function generateHospitalAnswer(query: string, context: string) {
-  const model = google("gemini-1.5-flash");
+  const model = google("gemini-2.0-flash");
 
   const { text } = await generateText({
     model,
