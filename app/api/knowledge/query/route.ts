@@ -1,4 +1,4 @@
-import { hospitalNamespace, topKSearchResults } from '@/lib/pineconeClient';
+import { getHospitalNamespace  } from '@/lib/pineconeClient';
 import { NextRequest, NextResponse } from 'next/server';
 
 interface ChunkFields {
@@ -16,10 +16,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing query' }, { status: 400 });
     }
 
-
+    const hospitalNamespace = getHospitalNamespace();
     const response = await hospitalNamespace.searchRecords({
       query: {
-        topK: topKSearchResults,
+        topK: 5,
         inputs: { text: query },
       },
       fields: ['chunk_text', 'category', 'chunk_page'],
