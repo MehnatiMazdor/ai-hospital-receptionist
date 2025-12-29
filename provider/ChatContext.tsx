@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
   createContext,
@@ -51,13 +51,19 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const router = useRouter();
 
+
+  useEffect(() => {
+  console.log("📍 ROUTE:", typeof window !== "undefined" ? window.location.pathname : "SSR");
+});
+
+
   // 1️⃣ Initialize user: anonymous sign-in if no user
   useEffect(() => {
     const initUser = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      
+
       if (user) {
         setUser(user);
       } else {
@@ -65,7 +71,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
           data: { user: anonUser },
           error,
         } = await supabase.auth.signInAnonymously();
-        
+
         if (error) {
           console.error("Anonymous sign-in error:", error);
         } else {
@@ -94,7 +100,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   // 2️⃣ Fetch recent sessions when user is ready
-  const fetchRecentSessions = useCallback(async () => {
+  const fetchRecentSessions = async () => {
     if (!user) return;
 
     const { data } = await supabase
@@ -106,7 +112,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
       .limit(5);
 
     setRecentSessions(data || []);
-  }, [user]);
+  };
 
   useEffect(() => {
     if (user) {
@@ -115,55 +121,59 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   }, [user, fetchRecentSessions]);
 
   // 3️⃣ Start a new chat session (clears UI state only)
-  const startNewSession = useCallback(async (title?: string) => {
-    if (!user) return;
+  const startNewSession =
+    async (title?: string) => {
+      console.log("🆕 startNewSession CALLED");
 
-    // Clear current state immediately and synchronously
-    setCurrentSessionId(null);
-    setMessages([]);
-    
-    // Navigate to /chat (no session ID yet - will be created on first message)
-    router.push('/chat');
-  }, [user, router]);
-
-  // 4️⃣ Select an existing session
-  const selectSession = useCallback(
-    async (id: string) => {
       if (!user) return;
 
-      // Don't refetch if already on this session with messages loaded
-      if (id === currentSessionId && messages.length > 0) return;
-
-      // Immediately update session ID to prevent race conditions
-      setCurrentSessionId(id);
-      
-      // Clear messages first to show loading state
+      // Clear current state immediately and synchronously
+      setCurrentSessionId(null);
       setMessages([]);
 
-      // Fetch messages for this session
-      const { data: sessionMessages, error } = await supabase
-        .from("chat_messages")
-        .select("*")
-        .eq("chat_session_id", id)
-        .order("created_at", { ascending: true });
+      console.log("➡️ Navigating to /chat");
+      // Navigate to /chat (no session ID yet - will be created on first message)
+      router.push("/chat");
+    }
 
-      if (error) {
-        console.error("Error fetching messages:", error);
-        return;
-      }
+  // 4️⃣ Select an existing session
+  const selectSession = async (id: string) => {
+    console.log("👉 selectSession CALLED with:", id);
+    if (!user) return;
 
-      setMessages(sessionMessages || []);
-      
-      // Only navigate if we're not already there
-      if (typeof window !== 'undefined' && !window.location.pathname.includes(id)) {
-        router.push(`/chat/${id}`);
-      }
-    },
-    [user, currentSessionId, messages.length, router]
-  );
+    // Don't refetch if already on this session with messages loaded
+    if (id === currentSessionId && messages.length > 0) return;
+
+    console.log("🔄 setting currentSessionId =", id);
+    // Immediately update session ID to prevent race conditions
+    setCurrentSessionId(id);
+
+    // Clear messages first to show loading state
+    setMessages([]);
+
+    console.log("📡 fetching messages for", id);
+    // Fetch messages for this session
+    const { data: sessionMessages, error } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("chat_session_id", id)
+      .order("created_at", { ascending: true });
+
+    console.log("✅ fetch finished for", id);
+
+    if (error) {
+      console.error("Error fetching messages:", error);
+      return;
+    }
+
+    setMessages(sessionMessages || []);
+
+     console.log("🧭 attempting navigation to", `/chat/${id}`);
+    router.push(`/chat/${id}`);
+  };
 
   // 5️⃣ Send message - ALL DB operations happen in /api/chat/query
-  const sendMessage = useCallback(
+  const sendMessage = 
     async (query: string) => {
       if (!user) return;
 
@@ -185,7 +195,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         const ragResponse = await fetch("/api/chat/query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             query: trimmedQuery,
             sessionId: currentSessionId,
           }),
@@ -196,10 +206,16 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
           throw new Error(errorData.error || "Failed to get response from RAG");
         }
 
-        const { answer, sources, sessionId: newSessionId, messageId } = await ragResponse.json();
+        const {
+          answer,
+          sources,
+          sessionId: newSessionId,
+          messageId,
+        } = await ragResponse.json();
 
         // If this was the first message, update sessionId and navigate to new URL
         if (!currentSessionId && newSessionId) {
+          console.log("🚨 sendMessage NAVIGATING to new session:", newSessionId);
           setCurrentSessionId(newSessionId);
           router.push(`/chat/${newSessionId}`);
         }
@@ -218,16 +234,13 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Refresh recent sessions list to show new/updated session
         await fetchRecentSessions();
-
       } catch (error) {
         console.error("Error sending message:", error);
-        
+
         // Re-throw error so UI can handle it (show error message to user)
         throw error;
       }
-    },
-    [user, currentSessionId, fetchRecentSessions, router]
-  );
+    }
 
   return (
     <ChatContext.Provider
@@ -246,8 +259,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     </ChatContext.Provider>
   );
 };
-
-
 
 // 'use client';
 
@@ -308,7 +319,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 //       const {
 //         data: { user },
 //       } = await supabase.auth.getUser();
-      
+
 //       if (user) {
 //         setUser(user);
 //       } else {
@@ -316,7 +327,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 //           data: { user: anonUser },
 //           error,
 //         } = await supabase.auth.signInAnonymously();
-        
+
 //         if (error) {
 //           console.error("Anonymous sign-in error:", error);
 //         } else {
@@ -372,7 +383,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 //     // Clear current state to show fresh chat
 //     setCurrentSessionId(null);
 //     setMessages([]);
-    
+
 //     // Navigate to /chat (no session ID yet - will be created on first message)
 //     router.push('/chat');
 //   }, [user, router]);
@@ -395,7 +406,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 //         .order("created_at", { ascending: true });
 
 //       setMessages(sessionMessages || []);
-      
+
 //       // Navigate to the session URL
 //       // router.push(`/chat/${id}`);
 
@@ -430,7 +441,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 //         const ragResponse = await fetch("/api/chat/query", {
 //           method: "POST",
 //           headers: { "Content-Type": "application/json" },
-//           body: JSON.stringify({ 
+//           body: JSON.stringify({
 //             query: trimmedQuery,
 //             sessionId: currentSessionId,
 //           }),
@@ -466,7 +477,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
 //       } catch (error) {
 //         console.error("Error sending message:", error);
-        
+
 //         // Re-throw error so UI can handle it (show error message to user)
 //         throw error;
 //       }
@@ -491,8 +502,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 //     </ChatContext.Provider>
 //   );
 // };
-
-
 
 // 'use client';
 
