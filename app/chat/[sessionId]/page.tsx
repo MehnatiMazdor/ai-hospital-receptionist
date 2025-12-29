@@ -10,6 +10,7 @@ export default function SessionPage() {
   const sessionId = params.sessionId as string
   const { selectSession, currentSessionId } = useChat()
   const hasLoaded = useRef(false)
+  const isSelecting = useRef(false)
 
   useEffect(() => {
     // Reset the ref when sessionId changes
@@ -18,11 +19,14 @@ export default function SessionPage() {
     }
 
     // Only select session if it's different and hasn't been loaded yet
-    if (sessionId && !hasLoaded.current) {
+    if (sessionId && !hasLoaded.current && !isSelecting.current) {
       hasLoaded.current = true
-      selectSession(sessionId)
+      isSelecting.current = true
+      selectSession(sessionId).finally(() => {
+        isSelecting.current = false
+      })
     }
-  }, [sessionId, currentSessionId, selectSession])
+  }, [sessionId, selectSession])
 
   // Render the same ChatPage component
   return <ChatPage />
