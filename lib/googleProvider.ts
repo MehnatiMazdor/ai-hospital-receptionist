@@ -1,4 +1,3 @@
-// lib/googleProvider.ts
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
@@ -14,6 +13,9 @@ export async function generateHospitalAnswer(
   query: string,
   context: string
 ): Promise<string> {
+
+  console.log("Query to Gemini:", query);
+  console.log("Context to Gemini:", context);
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash", // ✅ stable + supported
     contents: [
@@ -44,8 +46,11 @@ Short Answer:
     ],
   });
 
+  console.log("Google Gemini response:", response);
+
   // ✅ Safely extract text
   return (
+    // response.text || "Information not available"
     response.candidates?.[0]?.content?.parts?.[0]?.text ??
     "Information not available"
   );
@@ -76,7 +81,7 @@ Short Answer:
 //  * @param context retrieved pinecone chunks (already filtered)
 //  */
 // export async function generateHospitalAnswer(query: string, context: string) {
-//   const model = google("gemini-1.5-pro");
+//   const model = google("gemini-2.5-flash");
 
 //   const { text } = await generateText({
 //     model,

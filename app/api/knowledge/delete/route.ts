@@ -1,14 +1,19 @@
-import { createClient } from "@supabase/supabase-js";
+// import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { getHospitalNamespace } from "@/lib/pineconeClient";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_SUPABASE_PUBLISHABLE_KEY!
-);
+// const supabase = createClient(
+//   process.env.NEXT_PUBLIC_SUPABASE_URL!,
+//   process.env.NEXT_SUPABASE_PUBLISHABLE_KEY!
+// );
 
 export async function POST(request: NextRequest) {
   try {
+
+    const supabase = await createClient(); // safe
+
+
     const { filePath, namespace } = await request.json();
 
     if (!filePath || !namespace) {

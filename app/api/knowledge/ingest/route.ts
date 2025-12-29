@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+// import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { embedAndUpsert } from "@/lib/embedAndUpsert";
 import { loadPDF } from "@/lib/pdfLoader";
 import { DEFAULT_NAMESPACE } from "@/lib/pineconeClient";
@@ -6,20 +7,23 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_SUPABASE_PUBLISHABLE_KEY! // Use Service Role for server-side uploads
-);
+// const supabase = createClient(
+//   process.env.NEXT_PUBLIC_SUPABASE_URL!,
+//   process.env.NEXT_SUPABASE_PUBLISHABLE_KEY! // Use Service Role for server-side uploads
+// );
 
 export async function POST(request: NextRequest) {
   let uploadedFilePath: string | null = null;
 
-  const formData = await request.formData();
-  const file = formData.get("pdfFile") as File | null;
-  console.log("Received file:", file);
-  console.log("Content-Type Header:", request.headers.get("content-type"));
+    
+  const supabase = await createClient(); // safe
 
   try {
+    const formData = await request.formData();
+    const file = formData.get("pdfFile") as File | null;
+    console.log("Received file:", file);
+    console.log("Content-Type Header:", request.headers.get("content-type"));
+
     if (!file) {
       return NextResponse.json({ error: "Missing file" }, { status: 400 });
     }
@@ -27,7 +31,6 @@ export async function POST(request: NextRequest) {
     if (file.type !== "application/pdf") {
       return NextResponse.json({ error: "Only PDFs allowed" }, { status: 400 });
     }
-
 
     // 1. Get the original name and remove problematic characters
     const safeFileName = file.name
