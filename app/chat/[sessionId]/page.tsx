@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
 import { useChat } from "@/provider/ChatContext"
 import ChatPage from "../page"
@@ -9,10 +9,17 @@ export default function SessionPage() {
   const params = useParams()
   const sessionId = params.sessionId as string
   const { selectSession, currentSessionId } = useChat()
+  const hasLoaded = useRef(false)
 
   useEffect(() => {
-    // Only select session if it's different from current
-    if (sessionId && sessionId !== currentSessionId) {
+    // Reset the ref when sessionId changes
+    if (sessionId !== currentSessionId) {
+      hasLoaded.current = false
+    }
+
+    // Only select session if it's different and hasn't been loaded yet
+    if (sessionId && !hasLoaded.current) {
+      hasLoaded.current = true
       selectSession(sessionId)
     }
   }, [sessionId, currentSessionId, selectSession])
@@ -20,3 +27,26 @@ export default function SessionPage() {
   // Render the same ChatPage component
   return <ChatPage />
 }
+
+// "use client"
+
+// import { useEffect } from "react"
+// import { useParams } from "next/navigation"
+// import { useChat } from "@/provider/ChatContext"
+// import ChatPage from "../page"
+
+// export default function SessionPage() {
+//   const params = useParams()
+//   const sessionId = params.sessionId as string
+//   const { selectSession, currentSessionId } = useChat()
+
+//   useEffect(() => {
+//     // Only select session if it's different from current
+//     if (sessionId && sessionId !== currentSessionId) {
+//       selectSession(sessionId)
+//     }
+//   }, [sessionId, currentSessionId, selectSession])
+
+//   // Render the same ChatPage component
+//   return <ChatPage />
+// }
