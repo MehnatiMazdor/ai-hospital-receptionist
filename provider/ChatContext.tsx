@@ -1,146 +1,251 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, useRef } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+} from "react";
+import { useAuth } from "./AuthContext";
 import { supabase } from "../lib/supabase/client";
-import { User } from "@supabase/supabase-js";
 
-interface Session { id: string; title: string; message_count: number; is_closed: boolean; }
-interface Message { id: string; query: string; response: string | null; created_at: string; context_used?: any; }
+export interface Session {
+  id: string;
+  title: string;
+  message_count: number;
+  is_closed: boolean;
+}
+
+export interface Message {
+  id: string;
+  query: string;
+  response: string | null;
+  created_at: string;
+  context_used?: any;
+  isInitial?: boolean;
+}
+
+const INITIAL_MESSAGE = {
+  id: "initial",
+  query: "Hi there! I'm your CityCare AI assistant. How can I help you today?",
+  response: null,
+  created_at: new Date().toISOString(),
+  isInitial: true,
+  context_used: null,
+};
+
+export { INITIAL_MESSAGE };
 
 interface ChatContextType {
-  user: User | null;
-  loading: boolean;
   recentSessions: Session[];
-  currentSessionId: string | null;
   messages: Message[];
-  startNewSession: () => void;
-  selectSession: (id: string) => Promise<void>;
-  sendMessage: (query: string) => Promise<string | void>;
+  input: string;
+  setInput: (input: string) => void;
+  isTyping: boolean;
+  error: string | null;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  loadingMessages: boolean;
+  fetchRecentSessions: () => Promise<void>;
+  loadSessionData: (sessionId: string | undefined) => Promise<void>;
+  handleSend: (
+    query: string,
+    sessionId: string | undefined,
+    router: any
+  ) => Promise<void>;
+  handleNewChat: (router: any, sessionId?: string) => void;
+  handleSelectSession: (id: string, router: any, sessionId: string) => void;
 }
 
 const ChatContext = createContext<ChatContextType>({} as ChatContextType);
+
 export const useChat = () => useContext(ChatContext);
 
 export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+
   const [recentSessions, setRecentSessions] = useState<Session[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  
-  const currentSessionIdRef = useRef<string | null>(null);
-  const messagesLengthRef = useRef<number>(0);
-  
-  const renderCount = useRef(0);
-  renderCount.current++;
+  const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
-  console.log(`[1] ChatProvider Render #${renderCount.current} | Current ID: ${currentSessionId}`);
+  const currentLoadingIdRef = useRef<string | null>(null);
+  const isFirstLoad = useRef(true);
 
-  useEffect(() => {
-    currentSessionIdRef.current = currentSessionId;
-  }, [currentSessionId]);
+  const fetchRecentSessions = useCallback(async () => {
+    if (!user) return;
 
-  useEffect(() => {
-    messagesLengthRef.current = messages.length;
-  }, [messages.length]);
-
-  // Fetching Sessions
-  const fetchRecentSessions = useCallback(async (userId: string) => {
-    console.log(`[2] fetchRecentSessions executing for user: ${userId}`);
     const { data } = await supabase
       .from("chat_sessions")
       .select("id, title, message_count, is_closed")
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .eq("is_closed", false)
       .order("created_at", { ascending: false })
       .limit(5);
+
     setRecentSessions(data || []);
-  }, []);
+  }, [user]);
 
-  // Auth Initialization
-  useEffect(() => {
-    console.log("[3] Auth useEffect Hook firing (Mount)");
-    const initUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        console.log("[4] User found, setting state");
-        setUser(user);
-        fetchRecentSessions(user.id);
-      } else {
-        console.log("[4] No user, signing in anonymously");
-        const { data: { user: anonUser } } = await supabase.auth.signInAnonymously();
-        if (anonUser) {
-          setUser(anonUser);
-          fetchRecentSessions(anonUser.id);
-        }
-      }
-      setLoading(false);
-    };
-    initUser();
-  }, [fetchRecentSessions]);
-
-  const startNewSession = useCallback(() => {
-    console.log("[5] startNewSession: Clearing local chat state");
-    setCurrentSessionId(null);
-    setMessages([]);
-  }, []);
-
-  const selectSession = useCallback(async (id: string) => {
-    // Only fetch if it's a different session
-    if (id === currentSessionIdRef.current && messagesLengthRef.current > 0) {
-      console.log(`[6] selectSession: Session ${id} already active. Skipping fetch.`);
+  const loadSessionData = useCallback(async (sessionId: string | undefined) => {
+    if (!sessionId) {
+      setMessages([]);
+      setLoadingMessages(false);
+      currentLoadingIdRef.current = null;
       return;
     }
 
-    console.log(`[6] selectSession: Loading data for ${id}`);
-    setCurrentSessionId(id);
-    
-    const { data, error } = await supabase
-      .from("chat_messages")
-      .select("*")
-      .eq("chat_session_id", id)
-      .order("created_at", { ascending: true });
+    if (currentLoadingIdRef.current === sessionId) {
+      return;
+    }
 
-    if (!error) {
-      setMessages(data || []);
-      console.log(`[7] selectSession: Messages loaded for ${id}`);
+    setLoadingMessages(true);
+    currentLoadingIdRef.current = sessionId;
+
+    try {
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .eq("chat_session_id", sessionId)
+        .order("created_at", { ascending: true });
+
+      if (!error && data) {
+        setMessages(data);
+      }
+    } catch (error: unknown) {
+      console.error("Failed to load messages for session:", error);
+    } finally {
+      setLoadingMessages(false);
     }
   }, []);
 
-  const sendMessage = useCallback(async (query: string) => {
-    console.log("[8] sendMessage: Sending to API...");
-    if (!user) return;
+  const handleSend = useCallback(
+    async (userQuery: string, sessionId: string | undefined, router: any) => {
+      if (!userQuery.trim() || isTyping || !user) return;
 
-    const res = await fetch("/api/chat/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, sessionId: currentSessionIdRef.current }),
-    });
+      const query = userQuery.trim();
+      const isNewChat = !sessionId;
 
-    const data = await res.json();
-    
-    // Fetch the single message record created by the API
-    const { data: newMessage } = await supabase
-      .from("chat_messages")
-      .select("*")
-      .eq("id", data.messageId)
-      .single();
+      const optimisticMessage = {
+        id: crypto.randomUUID(),
+        query,
+        response: null,
+        created_at: new Date().toISOString(),
+      };
 
-    if (newMessage) {
-      setMessages((prev) => [...prev, newMessage]);
-    }
+      let messageIndex: number = 0;
+      setMessages((prev) => {
+        messageIndex = prev.length;
+        return [...prev, optimisticMessage];
+      });
 
-    fetchRecentSessions(user.id);
-    console.log("[9] sendMessage: API call complete");
-    return data.sessionId; // Return so the UI can navigate
-  }, [user, fetchRecentSessions]);
+      setInput("");
+      setIsTyping(true);
+      setError(null);
 
-  return (
-    <ChatContext.Provider value={{
-      user, loading, recentSessions, currentSessionId, messages,
-      startNewSession, selectSession, sendMessage
-    }}>
-      {children}
-    </ChatContext.Provider>
+      try {
+        const res = await fetch("/api/chat/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, sessionId }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to send message");
+        }
+
+        setMessages((prev) => {
+          const updated = [...prev];
+          if (updated[messageIndex]) {
+            updated[messageIndex] = {
+              ...updated[messageIndex],
+              id: data.messageId,
+              response: data.answer,
+            };
+          }
+          return updated;
+        });
+
+        if (isNewChat && data.sessionId) {
+          await fetchRecentSessions();
+          router.replace(`/chat/${data.sessionId}`);
+        }
+      } catch (error) {
+        console.error("Error sending message:", error);
+        setMessages((prev) => prev.filter((_, i) => i !== messageIndex));
+        setError(
+          error instanceof Error ? error.message : "Failed to send message"
+        );
+      } finally {
+        setIsTyping(false);
+      }
+    },
+    [isTyping, user, fetchRecentSessions]
   );
+
+  const handleNewChat = useCallback(
+    (router: any, sessionId?: string) => {
+      // 🛑 Guard 1: AI typing
+      if (isTyping) return;
+
+      // 🛑 Guard 2: already on /chat (new chat)
+      if (sessionId === undefined) {
+        console.log("[ChatContext] Already in new chat, skip");
+        return;
+      }
+
+      console.log("[ChatContext] Switching to new chat");
+
+      setMessages([]);
+      setError(null);
+      currentLoadingIdRef.current = null;
+      setSidebarOpen(false);
+
+      router.replace("/chat");
+    },
+    [isTyping]
+  );
+
+  const handleSelectSession = useCallback(
+    (id: string, router: any, sessionId: string) => {
+      if (id !== sessionId) {
+        setError(null);
+        router.replace(`/chat/${id}`);
+        setSidebarOpen(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (user && isFirstLoad.current) {
+      fetchRecentSessions();
+      isFirstLoad.current = false;
+    }
+  }, [fetchRecentSessions]);
+
+  const value = {
+    recentSessions,
+    messages,
+    input,
+    setInput,
+    isTyping,
+    error,
+    sidebarOpen,
+    setSidebarOpen,
+    loadingMessages,
+    fetchRecentSessions,
+    loadSessionData,
+    handleSend,
+    handleNewChat,
+    handleSelectSession,
+  };
+
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 };
