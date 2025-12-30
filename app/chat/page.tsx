@@ -27,7 +27,10 @@ export default function ChatPage() {
   const { initialLoading } = useAuth();
   const context = useChat();
 
-  const displayMessages = sessionId && context.messages.length > 0 ? context.messages : [INITIAL_MESSAGE];
+  const displayMessages =
+    sessionId && context.messages.length > 0
+      ? context.messages
+      : [INITIAL_MESSAGE];
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -92,7 +95,11 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-dvh bg-slate-50 font-sans relative">
-      <Sidebar sessionId={sessionId} handleNewChat={handleNewChat} handleSelectSession={handleSelectSession} />
+      <Sidebar
+        sessionId={sessionId}
+        handleNewChat={handleNewChat}
+        handleSelectSession={handleSelectSession}
+      />
 
       {/* Overlay for mobile */}
       {context.sidebarOpen && (
@@ -172,7 +179,10 @@ export default function ChatPage() {
                   const timestamp = new Date(msg.created_at);
 
                   return (
-                    <div key={isInitial ? "initial" : msg.id || index} className="space-y-2.5">
+                    <div
+                      key={isInitial ? "initial" : msg.id || index}
+                      className="space-y-2.5"
+                    >
                       {/* User message */}
                       {!isInitial && (
                         <div className="flex items-end gap-2 flex-row-reverse animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -220,7 +230,7 @@ export default function ChatPage() {
                                       Sources ({msg.context_used.length})
                                     </span>
                                   </div>
-                                  <div className="space-y-0.5">
+                                  {/* <div className="space-y-0.5">
                                     {msg.context_used.map(
                                       (source: any, idx: number) => (
                                         <div
@@ -238,6 +248,53 @@ export default function ChatPage() {
                                           </span>
                                         </div>
                                       )
+                                    )}
+                                  </div> */}
+                                  <div className="space-y-1">
+                                    {msg.context_used.map(
+                                      (source: any, idx: number) => {
+                                        const scorePercent = source.score * 100;
+
+                                        // PRO UX: color based on confidence
+                                        const barColor =
+                                          scorePercent >= 60
+                                            ? "bg-green-500"
+                                            : scorePercent >= 40
+                                            ? "bg-yellow-500"
+                                            : "bg-red-500";
+
+                                        return (
+                                          <div
+                                            key={source.id || idx}
+                                            className="flex items-center gap-3 text-slate-600"
+                                          >
+                                            {/* Source Index */}
+                                            <span className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-medium shrink-0 text-blue-700">
+                                              {idx + 1}
+                                            </span>
+
+                                            {/* Score Text */}
+                                            <span className="text-xs whitespace-nowrap">
+                                              {scorePercent.toFixed(1)}%
+                                              {source.page &&
+                                                ` • Page ${source.page}`}
+                                            </span>
+
+                                            {/* Match Bar */}
+                                            <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                              <div
+                                                className={`h-full ${barColor} rounded-full transition-all duration-300`}
+                                                style={{
+                                                  width: `${scorePercent}%`,
+                                                }}
+                                                title={`Match confidence: ${scorePercent.toFixed(
+                                                  1
+                                                )}%`}
+                                              />
+                                            </div>
+                                          </div>
+                                        );
+                                      }
                                     )}
                                   </div>
                                 </div>
