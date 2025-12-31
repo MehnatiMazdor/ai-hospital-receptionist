@@ -27,20 +27,18 @@ export default function UploadPage() {
   const [errorMessage, setErrorMessage] = useState("")
   const [steps, setSteps] = useState<ProcessStep[]>([
     { label: "Upload PDF to server", status: "pending" },
-    { label: "Store PDF in database", status: "pending" },
     { label: "Extract pages from document", status: "pending" },
     { label: "Chunk document content", status: "pending" },
     { label: "Generate embeddings", status: "pending" },
     { label: "Store vectors in Pinecone", status: "pending" },
+    { label: "Store PDF metadata in database", status: "pending" },
   ])
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
-    // Check file type
     if (file.type !== "application/pdf") {
       return { valid: false, error: "Only PDF files are allowed" }
     }
 
-    // Check file size (10MB = 10 * 1024 * 1024 bytes)
     const maxSize = 10 * 1024 * 1024
     if (file.size > maxSize) {
       return { valid: false, error: "File size must be less than 10MB" }
@@ -60,7 +58,6 @@ export default function UploadPage() {
     setSelectedFile(file)
     setErrorMessage("")
     setUploadStatus("idle")
-    // Reset steps
     setSteps(steps.map((step) => ({ ...step, status: "pending" })))
   }
 
@@ -91,41 +88,10 @@ export default function UploadPage() {
     }
   }, [])
 
-  const simulateUploadProcess = async () => {
-    // Step 1: Upload PDF (0-20%)
-    setSteps((prev) => prev.map((step, i) => (i === 0 ? { ...step, status: "processing" } : step)))
-
-    for (let i = 0; i <= 100; i += 5) {
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      setUploadProgress(i)
-    }
-
-    setSteps((prev) => prev.map((step, i) => (i === 0 ? { ...step, status: "completed" } : step)))
-
-    // Step 2: Store in database
-    setSteps((prev) => prev.map((step, i) => (i === 1 ? { ...step, status: "processing" } : step)))
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setSteps((prev) => prev.map((step, i) => (i === 1 ? { ...step, status: "completed" } : step)))
-
-    // Step 3: Extract pages
-    setSteps((prev) => prev.map((step, i) => (i === 2 ? { ...step, status: "processing" } : step)))
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    setSteps((prev) => prev.map((step, i) => (i === 2 ? { ...step, status: "completed" } : step)))
-
-    // Step 4: Chunk content
-    setSteps((prev) => prev.map((step, i) => (i === 3 ? { ...step, status: "processing" } : step)))
-    await new Promise((resolve) => setTimeout(resolve, 2500))
-    setSteps((prev) => prev.map((step, i) => (i === 3 ? { ...step, status: "completed" } : step)))
-
-    // Step 5: Generate embeddings
-    setSteps((prev) => prev.map((step, i) => (i === 4 ? { ...step, status: "processing" } : step)))
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-    setSteps((prev) => prev.map((step, i) => (i === 4 ? { ...step, status: "completed" } : step)))
-
-    // Step 6: Store in Pinecone
-    setSteps((prev) => prev.map((step, i) => (i === 5 ? { ...step, status: "processing" } : step)))
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    setSteps((prev) => prev.map((step, i) => (i === 5 ? { ...step, status: "completed" } : step)))
+  const updateStepStatus = (stepIndex: number, status: ProcessStep["status"]) => {
+    setSteps((prev) =>
+      prev.map((step, i) => (i === stepIndex ? { ...step, status } : step))
+    )
   }
 
   const handleUpload = async () => {
@@ -136,33 +102,93 @@ export default function UploadPage() {
     setUploadProgress(0)
 
     try {
-      // TODO: Replace with actual backend API call
-      // const formData = new FormData()
-      // formData.append('file', selectedFile)
-      // const response = await fetch('/api/upload-pdf', {
-      //   method: 'POST',
-      //   body: formData,
-      // })
+      const formData = new FormData()
+      formData.append("pdfFile", selectedFile)
 
-      // Simulate the upload process
-      await simulateUploadProcess()
+      // Use fetch with streaming response
+      const response = await fetch("/api/dashboard/pdfs", {
+        method: "POST",
+        body: formData,
+      })
 
-      // TODO: Handle actual response
-      // if (!response.ok) throw new Error('Upload failed')
+      if (!response.ok) {
+        throw new Error("Upload request failed")
+      }
 
-      setUploadStatus("success")
-      setIsUploading(false)
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
 
-      // Redirect after success
-      setTimeout(() => {
-        router.push("/dashboard/pdfs")
-      }, 2000)
+      if (!reader) {
+        throw new Error("No response body")
+      }
+
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n\n")
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (line.startsWith("event:")) {
+            const eventMatch = line.match(/event: (\w+)/)
+            const dataMatch = line.match(/data: (.+)/)
+
+            if (eventMatch && dataMatch) {
+              const eventType = eventMatch[1]
+              const data = JSON.parse(dataMatch[1])
+
+              if (eventType === "progress") {
+                const { step, status, message, metadata } = data
+
+                // Update specific step status
+                if (status === "processing") {
+                  updateStepStatus(step - 1, "processing")
+                } else if (status === "completed") {
+                  updateStepStatus(step - 1, "completed")
+                }
+
+                // Update progress bar (simulate based on step)
+                const progressPercentage = (step / 6) * 100
+                setUploadProgress(Math.min(progressPercentage, 100))
+
+                console.log(`Step ${step}: ${message}`, metadata)
+              } else if (eventType === "complete") {
+                setUploadStatus("success")
+                setUploadProgress(100)
+                setIsUploading(false)
+
+                console.log("Upload complete:", data)
+
+                // Redirect after success
+                setTimeout(() => {
+                  router.push("/dashboard/pdfs")
+                }, 2000)
+              } else if (eventType === "error") {
+                throw new Error(data.message)
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
-      console.error("[v0] Upload error:", error)
+      console.error("Upload error:", error)
       setUploadStatus("error")
-      setErrorMessage("Failed to upload and process PDF. Please try again.")
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to upload and process PDF. Please try again."
+      )
       setIsUploading(false)
-      setSteps((prev) => prev.map((step) => (step.status === "processing" ? { ...step, status: "error" } : step)))
+      setSteps((prev) =>
+        prev.map((step) =>
+          step.status === "processing" ? { ...step, status: "error" } : step
+        )
+      )
     }
   }
 
@@ -176,7 +202,6 @@ export default function UploadPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Upload PDF</h1>
         <p className="text-muted-foreground">
@@ -184,14 +209,12 @@ export default function UploadPage() {
         </p>
       </div>
 
-      {/* Upload Card */}
       <Card>
         <CardHeader>
           <CardTitle>Select PDF File</CardTitle>
           <CardDescription>Maximum file size: 10MB. Only PDF format is supported.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Drag and Drop Zone */}
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -219,7 +242,6 @@ export default function UploadPage() {
             />
           </div>
 
-          {/* Selected File */}
           {selectedFile && (
             <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
               <div className="flex items-center gap-3">
@@ -247,7 +269,6 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* Error Message */}
           {errorMessage && uploadStatus !== "success" && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -255,17 +276,15 @@ export default function UploadPage() {
             </Alert>
           )}
 
-          {/* Success Message */}
           {uploadStatus === "success" && (
-            <Alert className="border-success/50 bg-success/10">
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <AlertDescription className="text-success">
+            <Alert className="border-green-500/50 bg-green-500/10">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <AlertDescription className="text-green-700 dark:text-green-400">
                 PDF successfully uploaded and embedded! Redirecting to PDF list...
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Upload Progress */}
           {isUploading && (
             <Card className="border-primary/20 bg-primary/5">
               <CardContent className="pt-6">
@@ -274,7 +293,6 @@ export default function UploadPage() {
             </Card>
           )}
 
-          {/* Action Buttons */}
           <div className="flex gap-3">
             <Button onClick={handleUpload} disabled={!selectedFile || isUploading} className="flex-1" size="lg">
               {isUploading ? (
@@ -296,16 +314,16 @@ export default function UploadPage() {
         </CardContent>
       </Card>
 
-      {/* Info Card */}
       <Card className="border-accent/20 bg-accent/5">
         <CardHeader>
           <CardTitle className="text-base">Processing Pipeline</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            When you upload a PDF, it goes through a multi-step process: the file is uploaded to our servers, stored in
-            the database, pages are extracted, content is chunked into meaningful segments, embeddings are generated
-            using AI, and finally stored in Pinecone vector database for semantic search.
+            When you upload a PDF, it goes through a secure multi-step process: the file is uploaded to cloud storage,
+            pages are extracted, content is chunked into meaningful segments, embeddings are generated using AI, vectors
+            are stored in Pinecone, and finally metadata is saved to the database. If any step fails, all previous
+            changes are automatically rolled back to maintain data consistency.
           </p>
         </CardContent>
       </Card>

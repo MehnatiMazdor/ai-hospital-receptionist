@@ -13,7 +13,6 @@ export async function generateHospitalAnswer(
   query: string,
   context: string
 ): Promise<string> {
-
   console.log("Query to Gemini:", query);
   console.log("Context to Gemini:", context);
   const response = await ai.models.generateContent({
@@ -24,22 +23,22 @@ export async function generateHospitalAnswer(
         parts: [
           {
             text: `
-You are a hospital information assistant.
+            You are a hospital information assistant.
 
-RULES:
-- Answer ONLY from the given context
-- Maximum 10 lines
-- Clear, short, factual
-- If answer is missing, say: "Information not available"
+            RULES:
+              - Answer ONLY from the given context
+              - Maximum 10 lines
+              - Clear, short, factual
+              - If answer is missing, say: "Information not available"
 
-Context:
-${context}
+            Context:
+            ${context}
 
-User Question:
-${query}
+            User Question:
+            ${query}
 
-Short Answer:
-`,
+            Short Answer:
+            `,
           },
         ],
       },
@@ -55,22 +54,6 @@ Short Answer:
     "Information not available"
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // import { google } from "@ai-sdk/google";
 // import { generateText } from "ai";

@@ -1,194 +1,46 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   HardDrive,
   FileType,
   Layers,
   Database,
-  Clock,
   CheckCircle2,
   ExternalLink,
   Download,
   Trash2,
-  RefreshCw,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
-// TODO: Replace with actual API call
-async function getPDFById(id: string) {
-  // Simulate API call
-  const mockData: Record<
-    string,
-    {
-      id: string
-      name: string
-      url: string
-      size: number
-      uploadedAt: string
-      isEmbedded: boolean
-      pages: number
-      chunks: number
-      processingTime: number
-      embeddings: number
-      avgChunkSize: number
-      metadata: {
-        mimeType: string
-        createdAt: string
-        lastModified: string
-      }
-    }
-  > = {
-    "1": {
-      id: "1",
-      name: "Patient_Care_Guidelines.pdf",
-      url: "https://storage.example.com/pdfs/patient-care-guidelines.pdf",
-      size: 2.4 * 1024 * 1024,
-      uploadedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      isEmbedded: true,
-      pages: 45,
-      chunks: 156,
-      processingTime: 143,
-      embeddings: 156,
-      avgChunkSize: 512,
-      metadata: {
-        mimeType: "application/pdf",
-        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        lastModified: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    },
-    "2": {
-      id: "2",
-      name: "Medical_Procedures_2024.pdf",
-      url: "https://storage.example.com/pdfs/medical-procedures-2024.pdf",
-      size: 5.8 * 1024 * 1024,
-      uploadedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-      isEmbedded: true,
-      pages: 89,
-      chunks: 312,
-      processingTime: 287,
-      embeddings: 312,
-      avgChunkSize: 524,
-      metadata: {
-        mimeType: "application/pdf",
-        createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-        lastModified: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    },
-    "3": {
-      id: "3",
-      name: "Hospital_Policies.pdf",
-      url: "https://storage.example.com/pdfs/hospital-policies.pdf",
-      size: 1.2 * 1024 * 1024,
-      uploadedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      isEmbedded: true,
-      pages: 23,
-      chunks: 78,
-      processingTime: 82,
-      embeddings: 78,
-      avgChunkSize: 498,
-      metadata: {
-        mimeType: "application/pdf",
-        createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-        lastModified: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    },
-    "4": {
-      id: "4",
-      name: "Emergency_Protocols.pdf",
-      url: "https://storage.example.com/pdfs/emergency-protocols.pdf",
-      size: 3.7 * 1024 * 1024,
-      uploadedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-      isEmbedded: true,
-      pages: 67,
-      chunks: 234,
-      processingTime: 196,
-      embeddings: 234,
-      avgChunkSize: 518,
-      metadata: {
-        mimeType: "application/pdf",
-        createdAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
-        lastModified: new Date(Date.now() - 50 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    },
-    "5": {
-      id: "5",
-      name: "Medication_Guide.pdf",
-      url: "https://storage.example.com/pdfs/medication-guide.pdf",
-      size: 8.9 * 1024 * 1024,
-      uploadedAt: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
-      isEmbedded: false,
-      pages: 145,
-      chunks: 0,
-      processingTime: 0,
-      embeddings: 0,
-      avgChunkSize: 0,
-      metadata: {
-        mimeType: "application/pdf",
-        createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
-        lastModified: new Date(Date.now() - 73 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    },
-    "6": {
-      id: "6",
-      name: "Surgery_Standards.pdf",
-      url: "https://storage.example.com/pdfs/surgery-standards.pdf",
-      size: 4.3 * 1024 * 1024,
-      uploadedAt: new Date(Date.now() - 96 * 60 * 60 * 1000).toISOString(),
-      isEmbedded: true,
-      pages: 78,
-      chunks: 267,
-      processingTime: 221,
-      embeddings: 267,
-      avgChunkSize: 532,
-      metadata: {
-        mimeType: "application/pdf",
-        createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
-        lastModified: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    },
-    "7": {
-      id: "7",
-      name: "Infection_Control.pdf",
-      url: "https://storage.example.com/pdfs/infection-control.pdf",
-      size: 1.8 * 1024 * 1024,
-      uploadedAt: new Date(Date.now() - 120 * 60 * 60 * 1000).toISOString(),
-      isEmbedded: true,
-      pages: 34,
-      chunks: 112,
-      processingTime: 98,
-      embeddings: 112,
-      avgChunkSize: 505,
-      metadata: {
-        mimeType: "application/pdf",
-        createdAt: new Date(Date.now() - 200 * 24 * 60 * 60 * 1000).toISOString(),
-        lastModified: new Date(Date.now() - 125 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    },
-    "8": {
-      id: "8",
-      name: "Patient_Rights.pdf",
-      url: "https://storage.example.com/pdfs/patient-rights.pdf",
-      size: 0.9 * 1024 * 1024,
-      uploadedAt: new Date(Date.now() - 144 * 60 * 60 * 1000).toISOString(),
-      isEmbedded: true,
-      pages: 15,
-      chunks: 48,
-      processingTime: 52,
-      embeddings: 48,
-      avgChunkSize: 485,
-      metadata: {
-        mimeType: "application/pdf",
-        createdAt: new Date(Date.now() - 240 * 24 * 60 * 60 * 1000).toISOString(),
-        lastModified: new Date(Date.now() - 150 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    },
-  }
-
-  return mockData[id] || null
+type PDFDocument = {
+  id: string
+  name: string
+  url: string
+  size: number
+  mimeType: string
+  pages: number
+  chunks: number
+  isEmbedded: boolean
 }
 
 function formatFileSize(bytes: number): string {
@@ -199,29 +51,106 @@ function formatFileSize(bytes: number): string {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
 }
 
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
+export default function PDFDetailPage({ params }: { params: { id: string } }) {
+  const router = useRouter()
+  const [pdf, setPdf] = useState<PDFDocument | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${minutes}m ${secs}s`
-}
+  useEffect(() => {
+    fetchPDFDetails()
+  }, [params.id])
 
-export default async function PDFDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const pdf = await getPDFById(id)
+  const fetchPDFDetails = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await fetch(`/api/dashboard/pdfs/${params.id}`)
+      const result = await response.json()
 
-  if (!pdf) {
-    notFound()
+      if (result.success) {
+        setPdf(result.data)
+      } else {
+        setError(result.error || "Failed to load PDF details")
+      }
+    } catch (err) {
+      console.error("Error fetching PDF details:", err)
+      setError("Failed to load PDF details")
+    } finally {
+      setLoading(false)
+    }
   }
+
+  const handleDelete = async () => {
+    if (!pdf) return
+
+    try {
+      setDeleting(true)
+      const response = await fetch(`/api/knowledge/documents/${params.id}`, {
+        method: "DELETE",
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        router.push("/dashboard/pdfs")
+      } else {
+        setError(result.error || "Failed to delete PDF")
+      }
+    } catch (err) {
+      console.error("Error deleting PDF:", err)
+      setError("Failed to delete PDF")
+    } finally {
+      setDeleting(false)
+      setDeleteDialogOpen(false)
+    }
+  }
+
+  const handleDownload = () => {
+    if (pdf?.url) {
+      window.open(pdf.url, "_blank")
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (error || !pdf) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/dashboard/pdfs">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight">PDF Not Found</h1>
+        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error || "The requested PDF document could not be found."}
+          </AlertDescription>
+        </Alert>
+        <Button asChild>
+          <Link href="/dashboard/pdfs">Back to PDFs</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  // Calculate derived metrics on frontend
+  const pagesPerChunk = pdf.chunks > 0 ? (pdf.pages / pdf.chunks).toFixed(2) : "0"
+  const chunksPerPage = pdf.pages > 0 ? (pdf.chunks / pdf.pages).toFixed(2) : "0"
+  const avgChunkSize = pdf.chunks > 0 ? Math.round(pdf.size / pdf.chunks) : 0
 
   const stats = [
     {
@@ -244,17 +173,11 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
     },
     {
       label: "Embeddings",
-      value: pdf.embeddings.toString(),
+      value: pdf.chunks.toString(), // Embeddings = chunks
       icon: Database,
       color: "text-chart-3",
     },
   ]
-
-  const handleSyncToBackend = async () => {
-    "use server"
-    console.log("[v0] Syncing PDF to backend:", id)
-    // Future integration point
-  }
 
   return (
     <div className="space-y-6">
@@ -269,7 +192,7 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-3xl font-bold tracking-tight text-balance">{pdf.name}</h1>
             {pdf.isEmbedded ? (
-              <Badge className="bg-success/10 text-success hover:bg-success/20 border-success/20">
+              <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/20 border-green-500/20">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
                 Embedded
               </Badge>
@@ -277,7 +200,6 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
               <Badge variant="secondary">Pending</Badge>
             )}
           </div>
-          <p className="text-sm text-muted-foreground">Uploaded {formatDate(pdf.uploadedAt)}</p>
         </div>
       </div>
 
@@ -318,17 +240,17 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
               <Separator />
               <div className="flex items-start justify-between">
                 <span className="text-sm text-muted-foreground">MIME Type</span>
-                <span className="text-sm font-medium">{pdf.metadata.mimeType}</span>
+                <span className="text-sm font-medium">{pdf.mimeType}</span>
               </div>
               <Separator />
               <div className="flex items-start justify-between">
-                <span className="text-sm text-muted-foreground">Created</span>
-                <span className="text-sm font-medium">{formatDate(pdf.metadata.createdAt)}</span>
+                <span className="text-sm text-muted-foreground">Total Pages</span>
+                <span className="text-sm font-medium">{pdf.pages} pages</span>
               </div>
               <Separator />
               <div className="flex items-start justify-between">
-                <span className="text-sm text-muted-foreground">Last Modified</span>
-                <span className="text-sm font-medium">{formatDate(pdf.metadata.lastModified)}</span>
+                <span className="text-sm text-muted-foreground">Total Chunks</span>
+                <span className="text-sm font-medium">{pdf.chunks} chunks</span>
               </div>
             </div>
             <Button variant="outline" className="w-full bg-transparent" asChild>
@@ -349,28 +271,28 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
           <CardContent className="space-y-4">
             <div className="space-y-3">
               <div className="flex items-start justify-between">
-                <span className="text-sm text-muted-foreground">Upload Date</span>
-                <span className="text-sm font-medium">{formatDate(pdf.uploadedAt)}</span>
-              </div>
-              <Separator />
-              <div className="flex items-start justify-between">
-                <span className="text-sm text-muted-foreground">Processing Time</span>
-                <span className="text-sm font-medium">{formatDuration(pdf.processingTime)}</span>
-              </div>
-              <Separator />
-              <div className="flex items-start justify-between">
                 <span className="text-sm text-muted-foreground">Embedding Status</span>
                 <span className="text-sm font-medium">{pdf.isEmbedded ? "Completed" : "Pending"}</span>
               </div>
               <Separator />
               <div className="flex items-start justify-between">
                 <span className="text-sm text-muted-foreground">Total Embeddings</span>
-                <span className="text-sm font-medium">{pdf.embeddings} vectors</span>
+                <span className="text-sm font-medium">{pdf.chunks} vectors</span>
               </div>
               <Separator />
               <div className="flex items-start justify-between">
                 <span className="text-sm text-muted-foreground">Avg. Chunk Size</span>
-                <span className="text-sm font-medium">{pdf.avgChunkSize} tokens</span>
+                <span className="text-sm font-medium">{formatFileSize(avgChunkSize)}</span>
+              </div>
+              <Separator />
+              <div className="flex items-start justify-between">
+                <span className="text-sm text-muted-foreground">Storage Backend</span>
+                <span className="text-sm font-medium">Supabase Storage</span>
+              </div>
+              <Separator />
+              <div className="flex items-start justify-between">
+                <span className="text-sm text-muted-foreground">Vector Database</span>
+                <span className="text-sm font-medium">Pinecone</span>
               </div>
             </div>
           </CardContent>
@@ -390,7 +312,7 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
                 <FileType className="h-4 w-4" />
                 Pages per Chunk
               </div>
-              <p className="text-2xl font-bold">{(pdf.pages / pdf.chunks).toFixed(2)}</p>
+              <p className="text-2xl font-bold">{pagesPerChunk}</p>
               <p className="text-xs text-muted-foreground">Average pages in each chunk</p>
             </div>
             <div className="space-y-2">
@@ -398,16 +320,16 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
                 <Layers className="h-4 w-4" />
                 Chunks per Page
               </div>
-              <p className="text-2xl font-bold">{(pdf.chunks / pdf.pages).toFixed(2)}</p>
+              <p className="text-2xl font-bold">{chunksPerPage}</p>
               <p className="text-xs text-muted-foreground">Average chunks per page</p>
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                Processing Speed
+                <Database className="h-4 w-4" />
+                Total Vectors
               </div>
-              <p className="text-2xl font-bold">{(pdf.pages / (pdf.processingTime / 60)).toFixed(1)}/min</p>
-              <p className="text-xs text-muted-foreground">Pages processed per minute</p>
+              <p className="text-2xl font-bold">{pdf.chunks}</p>
+              <p className="text-xs text-muted-foreground">Stored in vector database</p>
             </div>
           </div>
         </CardContent>
@@ -421,17 +343,15 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleDownload}>
               <Download className="mr-2 h-4 w-4" />
               Download PDF
             </Button>
-            <form action={handleSyncToBackend}>
-              <Button variant="outline" type="submit">
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Re-process Document
-              </Button>
-            </form>
-            <Button variant="outline" className="text-destructive hover:text-destructive bg-transparent">
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive bg-transparent"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete Document
             </Button>
@@ -441,6 +361,36 @@ export default async function PDFDetailPage({ params }: { params: Promise<{ id: 
           </p>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete PDF Document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{pdf.name}" and all associated embeddings from your
+              knowledge base. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
