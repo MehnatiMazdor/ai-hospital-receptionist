@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutDashboard, FileText, Upload, Menu, X, Activity, BarChart3 } from "lucide-react"
@@ -17,18 +17,57 @@ const navigation = [
 export function DashboardSidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
+  const touchStartX = useRef(0)
+  const touchEndX = useRef(0)
+
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.touches[0].clientX
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      touchEndX.current = e.touches[0].clientX
+    }
+
+    const handleTouchEnd = () => {
+      // Swipe from left edge to right (open sidebar)
+      if (touchStartX.current < 50 && touchEndX.current - touchStartX.current > 100) {
+        setIsOpen(true)
+      }
+      
+      // Swipe from right to left (close sidebar)
+      if (isOpen && touchStartX.current - touchEndX.current > 100) {
+        setIsOpen(false)
+      }
+    }
+
+    // Only add listeners on mobile
+    if (window.innerWidth < 1024) {
+      document.addEventListener('touchstart', handleTouchStart)
+      document.addEventListener('touchmove', handleTouchMove)
+      document.addEventListener('touchend', handleTouchEnd)
+    }
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleTouchEnd)
+    }
+  }, [isOpen])
 
   return (
     <>
-      {/* Mobile menu button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="fixed top-4 left-4 z-50 lg:hidden"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-      </Button>
+      {/* Mobile menu button - Only show hamburger when closed */}
+      {/* {!isOpen && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="fixed top-4 left-4 z-60 lg:hidden bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-accent"
+          onClick={() => setIsOpen(true)}
+        >
+          <Menu className="h-6 w-6" />
+        </Button>
+      )} */}
 
       {/* Overlay for mobile */}
       {isOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setIsOpen(false)} />}
@@ -41,13 +80,25 @@ export function DashboardSidebar() {
         )}
       >
         <div className="flex h-full flex-col">
-          {/* Logo/Brand */}
-          <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
-            <Activity className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-lg font-semibold text-sidebar-foreground">Hospital RAG</h1>
-              <p className="text-xs text-muted-foreground">Admin Dashboard</p>
+          {/* Logo/Brand with Close Button */}
+          <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-6">
+            <div className="flex items-center gap-2">
+              <Activity className="h-8 w-8 text-primary" />
+              <div>
+                <h1 className="text-lg font-semibold text-sidebar-foreground">Hospital RAG</h1>
+                <p className="text-xs text-muted-foreground">Admin Dashboard</p>
+              </div>
             </div>
+            
+            {/* Close button - Only visible on mobile when sidebar is open */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden"
+              onClick={() => setIsOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
           </div>
 
           {/* Navigation */}

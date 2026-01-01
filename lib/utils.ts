@@ -21,3 +21,10 @@ export const getSafeFileName = (filename: string): string => {
     .replace(/\s+/g, "_")      // replace spaces with underscores
     .replace(/[^\w.-]/g, "");  // remove all non-alphanumeric except _ . -
 };
+
+
+
+export function truncateName(name: string, max = 14) {
+  if (name.length <= max) return name
+  return name.slice(0, max) + "…"
+}
