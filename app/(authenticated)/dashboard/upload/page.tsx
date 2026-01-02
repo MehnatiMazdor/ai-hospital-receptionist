@@ -212,8 +212,8 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 border-b pb-4 -mx-6 px-6 -mt-6 pt-6 mb-6">
+    <div className="space-y-6">
+      <div className="lg:sticky mt-14 lg:top-0 lg:z-50 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 border-b pb-4 -mx-6 px-6 pt-6 mb-6">
         <div className="space-y-2">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
             Upload PDF

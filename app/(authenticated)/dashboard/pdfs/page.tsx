@@ -194,7 +194,7 @@ export default function PDFsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 border-b pb-4 -mx-6 px-6 -mt-6 pt-6 mb-6">
+      <div className="lg:sticky mt-14 lg:top-0 lg:z-50 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 border-b pb-4 -mx-6 px-6 pt-6 mb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold tracking-tight text-primary">

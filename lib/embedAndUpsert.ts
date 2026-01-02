@@ -6,7 +6,8 @@ import { getSafeFileName } from "./utils";
 export const embedAndUpsert = async (
   documents: Document[],
   namespace: string,
-  originalfileName: string
+  originalfileName: string,
+  pdfDocumentId: string
 ) => {
 
   // Initialize the text splitter for chunking
@@ -48,6 +49,7 @@ export const embedAndUpsert = async (
     text: chunk.pageContent,
     uploadId,
     originalfileName,
+    pdfDocumentId,
     pdfInfo,
     pageNumber: chunk.metadata?.loc?.pageNumber ?? 0,
   }));

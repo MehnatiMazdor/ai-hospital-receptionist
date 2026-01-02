@@ -1,9 +1,12 @@
 // app/api/knowledge/documents/[id]/route.ts
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { getHospitalNamespace } from "@/lib/pineconeClient";
+import { SUPABASE_STORAGE_BUCKET_NAME } from "@/constants";
 
 export const runtime = "nodejs";
 
+// GET endpoint for individual PDF
 export async function GET(
   _: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -45,9 +48,9 @@ export async function GET(
         mimeType: pdf.mime_type,
         pages: pdf.document_pages,
         chunks: pdf.document_chunks,
-        // Note: We don't have these fields in the database yet
-        // They can be calculated on frontend or added to DB in future
-        isEmbedded: pdf.document_chunks > 0, // If chunks exist, it's embedded
+        isEmbedded: pdf.embedded_status === 'embedded',
+        embeddedStatus: pdf.embedded_status, // 'pending' | 'deleted' | 'embedded '
+        hasStorageFile: !!pdf.upload_file_storage_path, // boolean
       },
     });
   } catch (error) {
@@ -64,76 +67,97 @@ export async function GET(
 
 // DELETE endpoint for individual PDF
 export async function DELETE(
-  request: NextRequest,
+  _: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  const supabase = await createClient();
+
+  console.log("Deleting PDF document with ID:", id);
+
+  if (!id) {
+    return NextResponse.json({ error: "PDF ID is required" }, { status: 400 });
+  }
+
+  // 1️⃣ Fetch document
+  const { data: doc, error } = await supabase
+    .from("pdf_documents")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  console.log("Fetched document for deletion:", doc, error);
+
+
+  if (!doc || error) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const storagePath = doc.upload_file_storage_path;
+
+  // 2️⃣ PINECONE — HARD GATE
   try {
-    const supabase = await createClient();
-    const { id } = await params;
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Document ID is required" },
-        { status: 400 }
-      );
-    }
-
-    // Get PDF details first
-    const { data: pdf, error: fetchError } = await supabase
-      .from("pdf_documents")
-      .select("pdf_url")
-      .eq("id", id)
-      .single();
-
-    if (fetchError || !pdf) {
-      return NextResponse.json(
-        { success: false, error: "PDF document not found" },
-        { status: 404 }
-      );
-    }
-
-    // Extract storage path from URL
-    const urlParts = pdf.pdf_url.split("/storage/v1/object/public/");
-    if (urlParts.length === 2) {
-      const fullPath = urlParts[1];
-      const pathParts = fullPath.split("/");
-      const bucketName = pathParts[0];
-      const filePath = pathParts.slice(1).join("/");
-
-      // Delete from storage
-      const { error: storageError } = await supabase.storage
-        .from(bucketName)
-        .remove([filePath]);
-
-      if (storageError) {
-        console.error("Storage deletion error:", storageError);
-      }
-    }
-
-    // Delete from database
-    const { error: dbError } = await supabase
-      .from("pdf_documents")
-      .delete()
-      .eq("id", id);
-
-    if (dbError) {
-      throw new Error(`Failed to delete PDF document: ${dbError.message}`);
-    }
-
-    // TODO: Delete vectors from Pinecone using document ID
-
-    return NextResponse.json({
-      success: true,
-      message: "PDF document deleted successfully",
+    const hospitalNamespace = getHospitalNamespace();
+    await hospitalNamespace.deleteMany({
+      pdfDocumentId: id,
     });
-  } catch (error) {
-    console.error("Error deleting PDF document:", error);
+
+    console.log("Pinecone vectors deleted for document ID:", id);
+  } catch {
     return NextResponse.json(
-      {
-        success: false,
-        error: (error as Error).message || "Internal Server Error",
-      },
+      { error: "Pinecone deletion failed" },
       { status: 500 }
     );
   }
+
+  // 3️⃣ STORAGE
+  const { error: storageError } = await supabase.storage
+    .from(SUPABASE_STORAGE_BUCKET_NAME)
+    .remove(storagePath ? [storagePath] : []);
+
+  if (storageError) {
+    await supabase
+      .from("pdf_documents")
+      .update({ embedded_status: "deleted" })
+      .eq("id", id);
+
+
+    return NextResponse.json(
+      { error: "Storage deletion failed" },
+      { status: 500 }
+    );
+  }
+
+  console.log("Storage deleted for document ID:", id);
+
+
+  // 4️⃣ DATABASE
+  const { error: dbError } = await supabase
+    .from("pdf_documents")
+    .delete()
+    .eq("id", id);
+
+  if (dbError) {
+    // ✔ NO ROLLBACK
+    // ✔ Just reflect reality in DB
+    await supabase
+      .from("pdf_documents")
+      .update({
+        embedded_status: "deleted",
+        uploaded_file_storage_path: null
+      })
+      .eq("id", id);
+
+    return NextResponse.json(
+      { error: "Database deletion failed, storage already removed" },
+      { status: 500 }
+    );
+  }
+
+  console.log("Database record deleted for document ID:", id);
+
+  // ✅ SUCCESS
+  return NextResponse.json({
+    message: "PDF document deleted completely successfully",
+  }, { status: 200 });
 }

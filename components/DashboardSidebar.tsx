@@ -57,25 +57,34 @@ export function DashboardSidebar() {
 
   return (
     <>
-      {/* Mobile menu button - Only show hamburger when closed */}
-      {/* {!isOpen && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="fixed top-4 left-4 z-60 lg:hidden bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-accent"
-          onClick={() => setIsOpen(true)}
-        >
-          <Menu className="h-6 w-6" />
-        </Button>
-      )} */}
+      {/* Mobile sticky header bar - Only visible on mobile screens */}
+      <div className="fixed top-0 left-0 right-0 z-60 lg:hidden h-14 bg-background/80 backdrop-blur-md border-b border-border/40 shadow-sm">
+        <div className="flex items-center h-full px-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hover:bg-accent"
+            onClick={() => setIsOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center gap-2 ml-3">
+            <Activity className="h-6 w-6 text-primary" />
+            <span className="text-sm font-semibold">Hospital RAG</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Spacer for mobile header - pushes content down */}
+      <div className="h-14 lg:hidden" />
 
       {/* Overlay for mobile */}
-      {isOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setIsOpen(false)} />}
+      {isOpen && <div className="fixed inset-0 z-70 bg-black/50 lg:hidden" onClick={() => setIsOpen(false)} />}
 
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen w-64 border-r border-sidebar-border bg-sidebar transition-transform duration-300 lg:translate-x-0",
+          "fixed left-0 top-0 z-80 h-screen w-64 border-r border-sidebar-border bg-sidebar transition-transform duration-300 lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

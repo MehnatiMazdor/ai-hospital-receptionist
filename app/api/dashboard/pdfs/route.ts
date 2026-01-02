@@ -1,3 +1,5 @@
+// api/dashboard/pdfs/route.ts
+
 import { createClient } from "@/lib/supabase/server";
 import { embedAndUpsert } from "@/lib/embedAndUpsert";
 import { loadPDF } from "@/lib/pdfLoader";
@@ -8,6 +10,7 @@ import { getSafeFileName } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
+// GET endpoint to list PDFs with pagination and search
 async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -198,11 +201,12 @@ async function POST(request: NextRequest) {
           document_pages: pageCount,
           pdf_url: urlData.publicUrl,
           embedded_status: "pending",
+          upload_file_storage_path: uploadedFilePath,
         })
         .select()
         .single();
 
-      if (dbError) {
+      if (dbError || !pdfDocument) {
         console.error("Database insertion failed:", dbError);
 
         // Rollback storage
@@ -210,7 +214,7 @@ async function POST(request: NextRequest) {
           .from("ai-hospital-receptionist-bucket")
           .remove([uploadedFilePath]);
 
-        throw new Error(`Database insert failed: ${dbError.message}`);
+        throw new Error(`Database insert failed: ${dbError?.message || "Unknown error"}`);
       }
 
       pdfDocumentId = pdfDocument.id;
@@ -235,7 +239,8 @@ async function POST(request: NextRequest) {
         chunkCount = await embedAndUpsert(
           documents,
           DEFAULT_NAMESPACE,
-          file.name
+          file.name,
+          pdfDocumentId!
         );
 
         sendEvent("progress", {
