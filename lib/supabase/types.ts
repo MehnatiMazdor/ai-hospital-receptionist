@@ -14,7 +14,7 @@ export interface ChatMessage {
   query: string;               // patient query
   response?: string | null;    // chatbot response
   created_at: string;          // timestamptz string
-  context_used?: any;          // JSONB of documents/context used
+  context_used?: [];          // JSONB of documents/context used
   user_feedback?: number;      // smallint
   feedback_text?: string;      // optional feedback
 }

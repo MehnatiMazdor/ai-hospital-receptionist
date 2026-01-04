@@ -1,10 +1,10 @@
-import { clerkMiddleware} from "@clerk/nextjs/server";
+import { clerkMiddleware, ClerkMiddlewareAuth,} from "@clerk/nextjs/server";
 import { type NextRequest, NextResponse } from "next/server";
 import { getRouteType } from "@/lib/proxyutils";
 import { handleRouteByType } from "@/lib/proxyutils";
 
 
-export default clerkMiddleware(async (auth, req: NextRequest) => {
+export default clerkMiddleware(async (auth: ClerkMiddlewareAuth, req: NextRequest) => {
   const pathname = req.nextUrl.pathname;
 
   // Skip middleware for static files, Next.js internals, and auth pages

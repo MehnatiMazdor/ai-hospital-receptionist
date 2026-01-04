@@ -10,6 +10,7 @@ import {
 } from "react";
 import { supabase } from "../lib/supabase/client";
 import { User } from "@supabase/supabase-js";
+import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 export interface Message {
   id: string;
@@ -17,7 +18,7 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   created_at: string;
-  context_used?: any[];
+  context_used?: [];
   user_feedback?: number | null;
   feedback_text?: string | null;
 }
@@ -49,10 +50,10 @@ interface ChatContextType {
   handleSend: (
     query: string,
     sessionId: string | undefined,
-    router: any
+    router: unknown
   ) => Promise<void>;
-  handleNewChat: (router: any, currentSessionId?: string) => void;
-  handleSelectSession: (id: string, router: any, sessionId?: string) => void;
+  handleNewChat: (router: AppRouterInstance, currentSessionId?: string) => void;
+  handleSelectSession: (id: string, router: AppRouterInstance, sessionId?: string) => void;
 }
 
 const ChatContext = createContext<ChatContextType>({} as ChatContextType);
@@ -133,7 +134,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const handleSend = useCallback(
-    async (userQuery: string, sessionId: string | undefined, router: any) => {
+    async (userQuery: string, sessionId: string | undefined) => {
       if (!userQuery.trim() || isTyping || !user) return;
 
       const content = userQuery.trim();
@@ -187,7 +188,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   );
 
   const handleNewChat = useCallback(
-    (router: any, currentSessionId?: string) => {
+    (router: AppRouterInstance, currentSessionId?: string) => {
       if (isTyping) return;
 
       // Only navigate if not already on empty chat page
@@ -199,7 +200,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   );
 
   const handleSelectSession = useCallback(
-    (id: string, router: any, sessionId?: string) => {
+    (id: string, router: AppRouterInstance, sessionId?: string) => {
       if (id !== sessionId) {
         setError(null);
         setSidebarOpen(false);

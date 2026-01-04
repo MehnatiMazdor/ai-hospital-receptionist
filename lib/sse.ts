@@ -9,7 +9,7 @@ export function createSSEResponse() {
     },
   });
 
-  const sendEvent = (event: string, data: any) => {
+  const sendEvent = (event: string, data: unknown) => {
     const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     controller.enqueue(encoder.encode(message));
   };

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "./supabase/server";
 import { rateLimit } from "./rateLimit";
+import { ClerkMiddlewareAuth } from "@clerk/nextjs/server";
 
 
 // Route type identifier
@@ -12,11 +13,11 @@ export function getRouteType(pathname: string): 'chat' | 'chat-api' | 'dashboard
   return 'public';
 }
 
-
+// @typescript-eslint/no-explicit-any
 export async function handleRouteByType(
   routeType: 'chat' | 'chat-api' | 'dashboard' | 'dashboard-api'| 'public', 
   req: NextRequest, 
-  auth: any
+  auth: ClerkMiddlewareAuth
 ): Promise<NextResponse> {
 
   switch (routeType) {

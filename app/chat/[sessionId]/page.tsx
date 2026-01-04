@@ -87,7 +87,7 @@ export default function ChatDetailPage() {
             variant="ghost"
             size="icon"
             className="rounded-full text-slate-400"
-            onClick={handleNewChat}
+            onClick={() => handleNewChat(router)}
             title="New chat"
           >
             <RefreshCw className="w-4 h-4" />
