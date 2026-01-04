@@ -3,183 +3,151 @@ import { generateHospitalAnswer } from "@/lib/googleProvider";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-interface ChunkFields {
-  text: string;
-  category: string;
-  page?: number;
-}
-
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient(); // safe
+  const supabase = await createClient();
 
   try {
-    // 1️⃣ Authenticate user
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser();
+
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const userId = user.id;
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-    }
+    console.log("User is authenticated!");
 
-    // 2️⃣ Parse request
-    const { query, sessionId } = await request.json();
+    const { chatSessionId, content } = await request.json();
 
-    // 3️⃣ Validate query
-    if (!query || typeof query !== "string") {
-      return NextResponse.json({ error: "Missing query" }, { status: 400 });
-    }
-
-    if (query.length > 500) {
+    if (!content || typeof content !== "string" || content.length > 500) {
+      console.log("content is:", content);
+      console.log("type of content is:", typeof content);
+      console.log(content.length)
       return NextResponse.json(
-        { error: "Query too long (max 5–6 lines)" },
+        { error: "Invalid message content" },
         { status: 400 }
       );
     }
 
-    let currentSessionId = sessionId;
+    let sessionId = chatSessionId;
 
-    // 4️⃣ Create session if this is the first message (no sessionId provided)
-    if (!currentSessionId) {
-      const sessionTitle =
-        query.slice(0, 30) + (query.length > 30 ? "..." : "");
+    if (!sessionId) {
+      const title =
+        content.slice(0, 40) + (content.length > 40 ? "..." : "");
 
-      const { data: newSession, error: sessionError } = await supabase
+      const { data: session, error } = await supabase
         .from("chat_sessions")
         .insert({
-          user_id: userId,
-          title: sessionTitle,
+          user_id: user.id,
+          title,
         })
         .select("id")
         .single();
 
-      if (sessionError || !newSession) {
-        console.error("Error creating session:", sessionError);
-        return NextResponse.json(
-          { error: "Failed to create session" },
-          { status: 500 }
-        );
+      if (error || !session) {
+        throw new Error("Failed to create chat session");
       }
 
-      currentSessionId = newSession.id;
-      console.log("Created new session with ID:", currentSessionId);
+      console.log("Chat Session created successfully", session)
+
+      sessionId = session.id;
     }
 
-    // 5️⃣ Create message record FIRST (before RAG processing)
-    const { data: newMessage, error: messageError } = await supabase
+    const { data: userMessage, error: userMsgError } = await supabase
       .from("chat_messages")
       .insert({
-        chat_session_id: currentSessionId,
-        query,
-        response: "Processing...", // placeholder
+        chat_session_id: sessionId,
+        role: "user",
+        content,
+        context_used: [],
       })
       .select()
       .single();
 
-    if (messageError || !newMessage) {
-      console.error("Error creating message:", messageError);
-      return NextResponse.json(
-        { error: "Failed to create message" },
-        { status: 500 }
-      );
+    if (userMsgError || !userMessage) {
+      throw new Error("Failed to store user message");
     }
 
-    console.log("Created new message with ID:", newMessage.id);
+    console.log("User messages inserted successfully:", userMessage)
 
-    // 6️⃣ Pinecone semantic search
-    const hospitalNamespace = getHospitalNamespace();
+    let assistantContent =
+      "Sorry, I couldn’t generate a response at the moment.";
+    let contextUsed: any[] = [];
 
-    const response = await hospitalNamespace.searchRecords({
-      query: {
-        topK: 2,
-        inputs: { text: query },
-      },
-      fields: ["text" /*, 'category', 'page' */],
-    });
+    try {
+      const namespace = getHospitalNamespace();
 
-    console.log("Pinecone search response:", response);
+      const searchResult = await namespace.searchRecords({
+        query: {
+          topK: 2,
+          inputs: { text: content },
+        },
+        fields: ["text"],
+      });
 
-    const hits = response.result.hits;
+      const hits = searchResult?.result?.hits ?? [];
 
-    console.log("Pinecone hits:", hits);
-    console.log("Number of hits:", hits.length);
+      console.log("hits from pinecone db is:", hits)
 
-    let answer: string;
-    let sources: any[] = [];
+      if (hits.length > 0) {
+        const context = hits
+          .map(
+            (hit, i) =>
+              `Source ${i + 1}:\n${(hit.fields as any).text}`
+          )
+          .join("\n\n");
 
-    if (!hits.length) {
-      answer = "Information not available";
-    } else {
-      // 7️⃣ Build compact context
-      const context = hits
-        .map(
-          (hit, i) => `Source ${i + 1}:\n${(hit.fields as ChunkFields).text}`
-        )
-        .join("\n\n");
+        assistantContent = await generateHospitalAnswer(content, context);
 
-      console.log("Retrieved context:", context);
+        console.log("assistantContent fromgemini is:", assistantContent);
 
-      // 8️⃣ Ask Google LLM via utility
-      answer = await generateHospitalAnswer(query, context);
-      console.log("Generated answer:", answer);
-
-      sources = hits.map((hit) => ({
-        id: hit._id,
-        score: hit._score,
-        page: (hit.fields as ChunkFields).page ?? null,
-      }));
-    }
-
-    // 9️⃣ Update message with actual response
-    const { data: updatedMessage, error: updateError } = await supabase
-      .from("chat_messages")
-      .update({
-        response: answer,
-        context_used: sources.length > 0 ? sources : null,
-      })
-      .eq("id", newMessage.id)
-      .select()
-      .single();
-
-    if (updateError || !updatedMessage) {
-      console.error("Error updating message:", updateError);
-      return NextResponse.json(
-        { error: "Failed to update message" },
-        { status: 500 }
-      );
-    }
-
-    // 🔟 Incrment message count in session using RPC
-    const { error: countError } = await supabase.rpc(
-      "increment_message_count",
-      {
-        session_id: currentSessionId,
+        contextUsed = hits.map((hit) => ({
+          id: hit._id,
+          score: hit._score,
+          page: (hit.fields as any).page ?? null,
+        }));
+      } else {
+        assistantContent =
+          "I couldn’t find relevant information for your question.";
       }
-    );
-
-    if (countError) {
-      console.error("Error incrementing message count:", countError);
-      // Dont fail the whole request for this
+    } catch {
+      assistantContent =
+        "I’m having trouble accessing knowledge sources right now.";
+      contextUsed = [];
     }
 
-    // 1️⃣1️⃣ Return complete response with all data
-    return NextResponse.json({
-      answer,
-      sources,
-      sessionId: currentSessionId,
-      messageId: updatedMessage.id,
+    const { data: assistantMessage, error: assistantError } = await supabase
+      .from("chat_messages")
+      .insert({
+        chat_session_id: sessionId,
+        role: "assistant",
+        content: assistantContent,
+        context_used: contextUsed,
+      })
+      .select()
+      .single();
+
+    console.log("assistantMessage is created successfully:", assistantMessage)
+
+    if (assistantError || !assistantMessage) {
+      throw new Error("Failed to store assistant message");
+    }
+
+    await supabase.rpc("increment_message_count", {
+      session_id: sessionId,
+      increment_by: 2,
     });
-  } catch (error) {
-    console.error("Query error:", error);
+
+    return NextResponse.json({
+      chatSessionId: sessionId,
+      messages: [userMessage, assistantMessage],
+    });
+  } catch {
     return NextResponse.json(
-      { error: "Failed to query knowledge base" },
+      { error: "Failed to process message" },
       { status: 500 }
     );
   }
