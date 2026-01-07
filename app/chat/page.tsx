@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, Send, Menu, RefreshCw, X, User, AlertCircle } from "lucide-react";
+import { Bot, Send, Menu, RefreshCw, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useChat } from "@/provider/ChatContext";
 import { Message } from "@/provider/ChatContext";
-
 
 const SUGGESTIONS = [
   "What are your working hours?",
@@ -20,51 +19,71 @@ export default function EmptyChatPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { setMessages } = useChat();
+  const { setMessages, setIsAssistantTyping } = useChat();
 
-  const handleSend = async (e?: React.FormEvent) => {
+  const handleSendFirstChatMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
-    console.log("Input first message is:", input);
+    const content = input.trim();
 
-    setIsLoading(true);
-    setError(null);
+    // Create optimistic user message
     const optimisticUserMessage: Message = {
-      id: crypto.randomUUID(),
-      chat_session_id: "",
+      id: `temp-user-${Date.now()}`,
+      chat_session_id: "temp",
       role: "user",
-      content: input,
+      content,
       created_at: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, optimisticUserMessage]);
+    // Add user message immediately to UI
+    setMessages([optimisticUserMessage]);
+    setInput("");
+    setIsLoading(true);
+    setIsAssistantTyping(true);
+    setError(null);
 
     try {
-      const res = await fetch("/api/chat/query", {
+      // Create chat session and insert user message
+      const res = await fetch("/api/chat/first-chat-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: input }),
+        body: JSON.stringify({ content }),
       });
 
       const data = await res.json();
 
-      if (res.ok && data.chatSessionId) {
-        // Dispatch event to refresh sidebar
-        window.dispatchEvent(new Event("chatCreated"));
-        router.replace(`/chat/${data.chatSessionId}`);
-      } else {
-        setError(data.error || "Something went wrong. Please try again.");
+      if (!res.ok || !data.chatSessionId) {
+        throw new Error(data.error || "Failed to start chat");
       }
+
+      // Store the session ID to indicate this is a pending first response
+      sessionStorage.setItem("pendingChatSessionId", data.chatSessionId);
+      sessionStorage.setItem("pendingMessageContent", content)
+
+      // Dispatch event to refresh sidebar
+      window.dispatchEvent(new Event("chatCreated"));
+
+      // Navigate to the chat page immediately
+      router.replace(`/chat/${data.chatSessionId}`);
+
+      // The assistant response will be handled by the ChatDetailPage
+      // through the pendingFirstMessage mechanism
     } catch (err) {
-      console.error(err);
+      console.error("Error starting chat:", err);
       setError("Network error. Please try again.");
+      setMessages([]);
+      setIsAssistantTyping(false);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleNewChat = () => {
+    setMessages([]);
+    setInput("");
+    setError(null);
+    setIsAssistantTyping(false);
     router.replace("/chat");
   };
 
@@ -156,7 +175,7 @@ export default function EmptyChatPage() {
           </div>
 
           <form
-            onSubmit={handleSend}
+            onSubmit={handleSendFirstChatMessage}
             className="relative flex items-center gap-2"
           >
             <input
@@ -166,7 +185,7 @@ export default function EmptyChatPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSend();
+                  handleSendFirstChatMessage();
                 }
               }}
               placeholder="Type your message..."

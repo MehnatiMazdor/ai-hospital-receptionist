@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useChat } from "@/provider/ChatContext";
 import { supabase } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
+import { useAuth } from "@/provider/AuthContext";
 
 
 export interface Session {
@@ -20,7 +21,9 @@ export interface Session {
 export default function Sidebar() {
 
   const [recentChats, setRecentChats] = useState<Session[]>([]);
-  const { sidebarOpen, setSidebarOpen, user} = useChat();
+  // const { sidebarOpen, setSidebarOpen} = useChat();
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const {user} = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 

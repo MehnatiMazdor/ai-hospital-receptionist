@@ -36,14 +36,6 @@ export const embedAndUpsert = async (
   console.log("Chunk metadata loc start is:", chunks[0].metadata.loc?.start);
   console.log("Chunk metadata loc end is:", chunks[0].metadata.loc?.end);
 
-
-  // Prepare the data for upsertion
-  // const vectorsRecords = chunks.map((chunk, idx) => ({
-  //   id: `${namespace}-chunk-${idx}`,
-  //   text: chunk.pageContent,
-  //   category: chunk.metadata.info?.Producer || "unknown",
-  // }));
-
   const vectorsRecords = chunks.map((chunk, index) => ({
     id: `${namespace}/${uploadId}/${index}`,
     text: chunk.pageContent,

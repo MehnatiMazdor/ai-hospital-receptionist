@@ -4,7 +4,7 @@ import { getRouteType } from "@/lib/proxyutils";
 import { handleRouteByType } from "@/lib/proxyutils";
 
 
-export default clerkMiddleware(async (auth: ClerkMiddlewareAuth, req: NextRequest) => {
+export async function proxy(req: NextRequest){
   const pathname = req.nextUrl.pathname;
 
   // Skip middleware for static files, Next.js internals, and auth pages
@@ -23,9 +23,9 @@ export default clerkMiddleware(async (auth: ClerkMiddlewareAuth, req: NextReques
 
   const routeType = getRouteType(pathname);
 
-  return await handleRouteByType(routeType, req, auth);
+  return await handleRouteByType(routeType, req);
   
-});
+};
 
   
 export const config = {

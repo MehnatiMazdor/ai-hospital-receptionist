@@ -2,153 +2,214 @@ import { getHospitalNamespace } from "@/lib/pineconeClient";
 import { generateHospitalAnswer } from "@/lib/googleProvider";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { answerWithHospitalContext } from "@/lib/answerWithHospitalContext";
+import { AnswerWithContextResult } from "@/types";
 
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-
+export async function POST(req: NextRequest) {
   try {
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const { content, chatSessionId } = await req.json();
 
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!content?.trim()) {
+      return NextResponse.json({ error: "Empty message" }, { status: 400 });
     }
 
-    console.log("User is authenticated!");
-
-    const { chatSessionId, content } = await request.json();
-
-    if (!content || typeof content !== "string" || content.length > 500) {
-      console.log("content is:", content);
-      console.log("type of content is:", typeof content);
-      console.log(content.length)
+    if (!chatSessionId) {
       return NextResponse.json(
-        { error: "Invalid message content" },
+        { error: "Missing session ID" },
         { status: 400 }
       );
     }
 
-    let sessionId = chatSessionId;
+    const supabase = await createClient();
 
-    if (!sessionId) {
-      const title =
-        content.slice(0, 40) + (content.length > 40 ? "..." : "");
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      const { data: session, error } = await supabase
-        .from("chat_sessions")
-        .insert({
-          user_id: user.id,
-          title,
-        })
-        .select("id")
-        .single();
-
-      if (error || !session) {
-        throw new Error("Failed to create chat session");
-      }
-
-      console.log("Chat Session created successfully", session)
-
-      sessionId = session.id;
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: userMessage, error: userMsgError } = await supabase
+    // Insert user message
+    const { data: userMessage, error: userError } = await supabase
       .from("chat_messages")
       .insert({
-        chat_session_id: sessionId,
+        chat_session_id: chatSessionId,
         role: "user",
-        content,
+        content: content.trim(),
         context_used: [],
       })
       .select()
       .single();
 
-    if (userMsgError || !userMessage) {
-      throw new Error("Failed to store user message");
+    if (userError || !userMessage) {
+      console.error("Failed to insert user message:", userError);
+      return NextResponse.json(
+        { error: "Failed to save message" },
+        { status: 500 }
+      );
     }
 
-    console.log("User messages inserted successfully:", userMessage)
+    console.log("✅ User message inserted:", userMessage);
 
-    let assistantContent =
-      "Sorry, I couldn’t generate a response at the moment.";
-    let contextUsed: any[] = [];
-
-    try {
-      const namespace = getHospitalNamespace();
-
-      const searchResult = await namespace.searchRecords({
-        query: {
-          topK: 2,
-          inputs: { text: content },
-        },
-        fields: ["text"],
+    // Generate assistant response
+    const namespace = getHospitalNamespace();
+    const { assistantContent, contextUsed }: AnswerWithContextResult =
+      await answerWithHospitalContext({
+        content: content.trim(),
+        namespace,
+        generateAnswer: generateHospitalAnswer,
       });
 
-      const hits = searchResult?.result?.hits ?? [];
+    console.log("✅ Assistant content generated:", assistantContent);
+    console.log("✅ Context used:", contextUsed);
 
-      console.log("hits from pinecone db is:", hits)
-
-      if (hits.length > 0) {
-        const context = hits
-          .map(
-            (hit, i) =>
-              `Source ${i + 1}:\n${(hit.fields as any).text}`
-          )
-          .join("\n\n");
-
-        assistantContent = await generateHospitalAnswer(content, context);
-
-        console.log("assistantContent fromgemini is:", assistantContent);
-
-        contextUsed = hits.map((hit) => ({
-          id: hit._id,
-          score: hit._score,
-          page: (hit.fields as any).page ?? null,
-        }));
-      } else {
-        assistantContent =
-          "I couldn’t find relevant information for your question.";
-      }
-    } catch {
-      assistantContent =
-        "I’m having trouble accessing knowledge sources right now.";
-      contextUsed = [];
-    }
-
+    // Insert assistant message
     const { data: assistantMessage, error: assistantError } = await supabase
       .from("chat_messages")
       .insert({
-        chat_session_id: sessionId,
+        chat_session_id: chatSessionId,
         role: "assistant",
-        content: assistantContent,
-        context_used: contextUsed,
+        content: JSON.stringify(assistantContent), // store as JSON string
+        context_used: contextUsed ?? [],
       })
       .select()
       .single();
 
-    console.log("assistantMessage is created successfully:", assistantMessage)
-
     if (assistantError || !assistantMessage) {
-      throw new Error("Failed to store assistant message");
+      console.error("Failed to insert assistant message:", assistantError);
+      return NextResponse.json(
+        { error: "Failed to generate response" },
+        { status: 500 }
+      );
     }
 
+    console.log("✅ Assistant message inserted:", assistantMessage);
+
+    // Increment message count
     await supabase.rpc("increment_message_count", {
-      session_id: sessionId,
-      increment_by: 2,
+      session_id: chatSessionId,
     });
 
-    return NextResponse.json({
-      chatSessionId: sessionId,
-      messages: [userMessage, assistantMessage],
+    console.log("✅ Message count incremented for session:", chatSessionId);
+
+    console.log("Final response is:", {
+      ...assistantMessage,
+      content: JSON.parse(assistantMessage.content), // parse JSON for frontend (string for old or object for new)
     });
-  } catch {
+
+    // Return messages to frontend
+    return NextResponse.json({
+      messages: [
+        userMessage,
+        {
+          ...assistantMessage,
+          content: JSON.parse(assistantMessage.content), // parse JSON for frontend (string for old or object for new)
+        },
+      ],
+    });
+  } catch (err) {
+    console.error("❌ chat/query error:", err);
     return NextResponse.json(
-      { error: "Failed to process message" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
 }
+
+// import { getHospitalNamespace } from "@/lib/pineconeClient";
+// import { generateHospitalAnswer } from "@/lib/googleProvider";
+// import { NextRequest, NextResponse } from "next/server";
+// import { createClient } from "@/lib/supabase/server";
+// import { answerWithHospitalContext } from "@/lib/answerWithHospitalContext";
+
+// export const runtime = "nodejs";
+
+// export async function POST(req: NextRequest) {
+//   try {
+//     const { content, chatSessionId } = await req.json();
+
+//     if (!content?.trim()) {
+//       return NextResponse.json({ error: "Empty message" }, { status: 400 });
+//     }
+
+//     if (!chatSessionId) {
+//       return NextResponse.json({ error: "Missing session ID" }, { status: 400 });
+//     }
+
+//     const supabase = await createClient();
+
+//     const {
+//       data: { user },
+//     } = await supabase.auth.getUser();
+
+//     if (!user) {
+//       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+//     }
+
+//     // Insert user message
+//     const { data: userMessage, error: userError } = await supabase
+//       .from("chat_messages")
+//       .insert({
+//         chat_session_id: chatSessionId,
+//         role: "user",
+//         content: content.trim(),
+//         context_used: [],
+//       })
+//       .select()
+//       .single();
+
+//     if (userError || !userMessage) {
+//       console.error("Failed to insert user message:", userError);
+//       return NextResponse.json(
+//         { error: "Failed to save message" },
+//         { status: 500 }
+//       );
+//     }
+
+//     // Generate assistant response
+//     const namespace = getHospitalNamespace();
+//     const { assistantContent, contextUsed } = await answerWithHospitalContext({
+//       content: content.trim(),
+//       namespace,
+//       generateAnswer: generateHospitalAnswer,
+//     });
+
+//     // Insert assistant message
+//     const { data: assistantMessage, error: assistantError } = await supabase
+//       .from("chat_messages")
+//       .insert({
+//         chat_session_id: chatSessionId,
+//         role: "assistant",
+//         content: assistantContent,
+//         context_used: contextUsed ?? [],
+//       })
+//       .select()
+//       .single();
+
+//     if (assistantError || !assistantMessage) {
+//       console.error("Failed to insert assistant message:", assistantError);
+//       return NextResponse.json(
+//         { error: "Failed to generate response" },
+//         { status: 500 }
+//       );
+//     }
+
+//     // Increment message count
+//     await supabase.rpc("increment_message_count", {
+//       session_id: chatSessionId,
+//     });
+
+//     return NextResponse.json({
+//       messages: [userMessage, assistantMessage],
+//     });
+//   } catch (err) {
+//     console.error("chat/query error:", err);
+//     return NextResponse.json(
+//       { error: "Internal server error" },
+//       { status: 500 }
+//     );
+//   }
+// }

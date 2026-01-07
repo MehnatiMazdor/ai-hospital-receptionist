@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "./supabase/server";
 import { rateLimit } from "./rateLimit";
-import { ClerkMiddlewareAuth } from "@clerk/nextjs/server";
+// import { ClerkMiddlewareAuth } from "@clerk/nextjs/server";
 
 
 // Route type identifier
@@ -17,7 +17,6 @@ export function getRouteType(pathname: string): 'chat' | 'chat-api' | 'dashboard
 export async function handleRouteByType(
   routeType: 'chat' | 'chat-api' | 'dashboard' | 'dashboard-api'| 'public', 
   req: NextRequest, 
-  auth: ClerkMiddlewareAuth
 ): Promise<NextResponse> {
 
   switch (routeType) {
@@ -29,11 +28,11 @@ export async function handleRouteByType(
 
       if (error || !user) {
         // Prevent redirect loop - don't redirect if already on sign-in
-        if (req.nextUrl.pathname.startsWith('/sign-in')) {
+        if (req.nextUrl.pathname.startsWith('/login')) {
           return NextResponse.next();
         }
         
-        const signInUrl = new URL('/sign-in', req.url);
+        const signInUrl = new URL('/login', req.url);
         signInUrl.searchParams.set('redirect_url', req.url);
         return NextResponse.redirect(signInUrl);
       }
@@ -54,15 +53,17 @@ export async function handleRouteByType(
     case 'dashboard':
     case 'dashboard-api':  
     {
-      const { userId } = await auth();
+      // const { userId } = await auth();
+      const supabase = await createClient();
+      const {data: {user}} = await supabase.auth.getUser();
 
-      if (!userId) {
+      if (!user?.id) {
         // Prevent redirect loop - don't redirect if already on sign-in
-        if (req.nextUrl.pathname.startsWith('/sign-in')) {
+        if (req.nextUrl.pathname.startsWith('/login')) {
           return NextResponse.next();
         }
         
-        const signInUrl = new URL('/sign-in', req.url);
+        const signInUrl = new URL('/login', req.url);
         signInUrl.searchParams.set('redirect_url', req.url);
         return NextResponse.redirect(signInUrl);
       }
