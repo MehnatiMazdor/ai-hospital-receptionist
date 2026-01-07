@@ -15,8 +15,13 @@ export function ChatAuthGuard({ children }: { children: React.ReactNode }) {
     const init = async () => {
       try {
         if (!user) {
+          console.log("User is not present inside chatguard auth");
+          
           await ensureAnonymous();
+          console.log("Anonymous user is registered");
+          
         }
+        console.log("Anonymous user is present:", user)
       } catch (err) {
         console.error(err);
         setError("Failed to initialize chat session.");

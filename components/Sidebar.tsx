@@ -21,8 +21,7 @@ export interface Session {
 export default function Sidebar() {
 
   const [recentChats, setRecentChats] = useState<Session[]>([]);
-  // const { sidebarOpen, setSidebarOpen} = useChat();
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const { sidebarOpen, setSidebarOpen} = useChat();
   const {user} = useAuth();
   const pathname = usePathname();
   const router = useRouter();

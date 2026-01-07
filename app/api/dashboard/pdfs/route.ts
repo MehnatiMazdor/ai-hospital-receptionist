@@ -88,6 +88,15 @@ async function POST(request: NextRequest) {
   let pdfDocumentId: string | null = null;
   const supabase = await createClient();
 
+  const {data: {user}, error} = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return NextResponse.json(
+      { error: "Authentication failed" },
+      { status: 401 }
+    );
+  }
+
   // Create SSE stream
   const { stream, sendEvent, close } = createSSEResponse();
 
@@ -202,6 +211,7 @@ async function POST(request: NextRequest) {
           pdf_url: urlData.publicUrl,
           embedded_status: "pending",
           upload_file_storage_path: uploadedFilePath,
+          user_id: user.id
         })
         .select()
         .single();

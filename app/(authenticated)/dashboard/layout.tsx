@@ -1,8 +1,8 @@
 import React from "react";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardAuthGuard } from "@/components/DashboardAuthGuard";
-import { AuthProvider } from "@/provider/AuthContext";
-import { ChatProvider } from "@/provider/ChatContext";
+// import { AuthProvider } from "@/provider/AuthContext";
+// import { ChatProvider } from "@/provider/ChatContext";
 
 export default function DashboardLayout({
   children,
@@ -10,7 +10,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AuthProvider>
+    // <AuthProvider>
       <DashboardAuthGuard>
         {/* <ChatProvider> */}
           <div className="flex min-h-screen">
@@ -21,6 +21,6 @@ export default function DashboardLayout({
           </div>
         {/* </ChatProvider> */}
       </DashboardAuthGuard>
-    </AuthProvider>
+    // </AuthProvider>
   );
 }

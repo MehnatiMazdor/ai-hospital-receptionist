@@ -60,8 +60,8 @@ export async function POST(req: Request) {
     const insertPayload = {
       chat_session_id: chatSessionId,
       role: "assistant",
-      content: assistantContent,
-      context_used: JSON.stringify(contextUsed ?? []), // <-- serialize to JSON
+      content: JSON.stringify(assistantContent),
+      context_used: contextUsed ?? [], // <-- serialize to JSON
     };
 
     console.log("📝 Insert payload:", insertPayload);

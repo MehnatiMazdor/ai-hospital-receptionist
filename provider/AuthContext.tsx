@@ -71,9 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } = await supabase.auth.getUser();
 
       if (user) {
+        console.log("User is initialized inside home page auth provider", user);
+        
         setUser(user);
         setIsAnonymous(!!user.is_anonymous);
       }
+
+      console.log("No user is initialized yet though user is on home page auth provider");
+      
 
       setAuthLoading(false);
     };
@@ -114,8 +119,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
+        console.log("Something went wrong in registering user with signInWithPassword, error is:", error);
+        
         return { success: false, error: error.message };
       }
+
+      console.log("User is signedInWithPassword, data is:",data);
+      
 
       setUser(data.user);
       setIsAnonymous(false);

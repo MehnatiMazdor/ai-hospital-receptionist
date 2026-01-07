@@ -20,6 +20,7 @@ export function DashboardAuthGuard({
       setRedirecting(true);
       router.replace("/login");
     }
+    console.log("Dashboard user is present:", user)
   }, [user, authLoading, isAnonymous, router]);
 
   if (authLoading || redirecting) {

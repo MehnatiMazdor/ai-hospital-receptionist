@@ -19,6 +19,8 @@ function LoginForm(){
         setError("");
 
         const result = await signInWithPassword(email, password);
+        console.log("Result of signInWithPassword is:", result);
+        
 
         if (result.success) {
             router.push("/dashboard");

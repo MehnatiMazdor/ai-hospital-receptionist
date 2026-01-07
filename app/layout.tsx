@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 // import { ClerkProvider } from "@clerk/nextjs";
 // import { ChatProvider } from "@/provider/ChatContext";
+import { AuthProvider } from "@/provider/AuthContext";
 
 
 const geistSans = Geist({
@@ -26,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // <ChatProvider>
+    <AuthProvider>
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -34,6 +35,6 @@ export default function RootLayout({
         {children}
       </body>
     </html>
-    // </ChatProvider>
+    </AuthProvider>
   );
 }

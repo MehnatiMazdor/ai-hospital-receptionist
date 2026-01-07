@@ -8,7 +8,6 @@ import {
   useCallback,
 } from "react";
 import { supabase } from "../lib/supabase/client";
-import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { AssistantContent } from "@/types";
 import { useAuth } from "./AuthContext";
 import { useRouter } from "next/navigation";
@@ -31,6 +30,8 @@ interface ChatContextType {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   input: string;
   setInput: (input: string) => void;
+  sidebarOpen: boolean;
+  setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
   isAssistantTyping: boolean;
   setIsAssistantTyping: React.Dispatch<React.SetStateAction<boolean>>;
   error: string | null;
@@ -57,7 +58,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   const [input, setInput] = useState("");
   const [isAssistantTyping, setIsAssistantTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(
     undefined
@@ -245,6 +246,8 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     setMessages,
     input,
     setInput,
+    sidebarOpen,
+    setSidebarOpen,
     isAssistantTyping,
     setIsAssistantTyping,
     error,
