@@ -1,7 +1,4 @@
-// // /chat/[sessionId]
-
 // /chat/[sessionId]
-
 "use client";
 
 import { useRef, useEffect, useState } from "react";
@@ -18,19 +15,19 @@ import {
   FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Message } from "@/types/chat";
-import { parseMessageContent } from "@/lib/parseMessageContent";
-import { useAuth } from "@/provider/AuthContext";
+import { Message } from "@/provider/ChatContext";
 
 export default function ChatDetailPage() {
   const router = useRouter();
   const { sessionId } = useParams<{ sessionId: string }>();
+
+  console.log("[CHAT_UI] Render ChatDetailPage", { sessionId });
+
   const {
     getChatMessagesById,
     messages,
     isAssistantTyping,
     input,
-    handleSend,
     handleNewChat,
     setSidebarOpen,
     error,
@@ -38,94 +35,195 @@ export default function ChatDetailPage() {
     loadingMessages,
     setMessages,
     setIsAssistantTyping,
+    setError,
   } = useChat();
-  const {authLoading} = useAuth();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [isLoadingFirstResponse, setIsLoadingFirstResponse] = useState(false);
 
-  // Load session data when sessionId changes
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [streamProgress, setStreamProgress] = useState("");
+
+  /* ───────────── SESSION BOOTSTRAP ───────────── */
   useEffect(() => {
     if (!sessionId) return;
 
-    const pendingSessionId = sessionStorage.getItem("pendingChatSessionId");
-    const pendingFirstMessage = sessionStorage.getItem("pendingMessageContent");
+    console.log("[CHAT_UI] Session effect triggered", sessionId);
 
-    console.log("pendingSessionId is:", pendingSessionId);
+    const rawData = sessionStorage.getItem(`pending_msg_${sessionId}`);
 
-    if (pendingSessionId === sessionId) {
-      console.log("I am rendered in if block of useeffect pendingSessionId")
-      // This is a new chat - show typing indicator and fetch first response
-      setIsLoadingFirstResponse(true);
+    if (rawData) {
+      console.log("[CHAT_UI] First message detected → SSE start");
+
+      const pendingMsg = JSON.parse(rawData);
+
+      setMessages([pendingMsg]);
       setIsAssistantTyping(true);
+      setStreamProgress("Connecting...");
 
-      fetch("/api/chat/first-chat-response", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chatSessionId: sessionId,
-          content: pendingFirstMessage,
-        }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.assistantMessage) {
-            console.log(
-              "Received first assistantMessage response:",
-              data.assistantMessage
-            );
-            // API already returns parsed content, so we can use it directly
-            setMessages((prev) => [...prev, data.assistantMessage]);
-          }
-          // Clean up session storage
-          sessionStorage.removeItem("pendingChatSessionId");
-          sessionStorage.removeItem("pendingMessageContent");
-        })
-        .catch((err) => {
-          console.error("Error fetching first response:", err);
-        })
-        .finally(() => {
-          setIsLoadingFirstResponse(false);
-          setIsAssistantTyping(false);
-        });
+      console.time("[CHAT_UI] FIRST_MESSAGE_STREAM");
+      handleStreamingQuery(pendingMsg.content, sessionId, true);
+
+      sessionStorage.removeItem(`pending_msg_${sessionId}`);
     } else {
-      // Existing chat - load all messages normally
-      // getChatMessagesById handles parsing internally
-      console.log("I am rendered in else block of useeffect getChatMessageById")
+      console.log("[CHAT_UI] Existing session → loading messages");
       getChatMessagesById(sessionId);
     }
   }, [sessionId]);
 
-  // Auto-scroll to bottom when messages change
+  /* ───────────── AUTO SCROLL ───────────── */
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: messages.length <= 1 ? "auto" : "smooth",
-      });
-    }
+    if (!scrollRef.current) return;
+
+    scrollRef.current.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: messages.length <= 1 ? "auto" : "smooth",
+    });
   }, [messages, isAssistantTyping]);
 
-  // Handle sending a message
-  const handleSendInExistingChat = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!input.trim()) return;
+  /* ───────────── SSE STREAM HANDLER ───────────── */
+  const handleStreamingQuery = async (
+    content: string,
+    chatSessionId: string,
+    isFirstMessage: boolean = false
+  ) => {
+    console.log("[CHAT_UI] Starting streaming query", {
+      chatSessionId,
+      isFirstMessage,
+      contentLength: content.length,
+    });
 
-    await handleSend(input, sessionId, router);
+    try {
+      console.time("[CHAT_UI] SSE_CONNECTION");
+
+      const response = await fetch("/api/chat/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content,
+          chatSessionId,
+          isFirstMessage,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("[CHAT_UI] SSE HTTP error", response.status);
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      console.timeEnd("[CHAT_UI] SSE_CONNECTION");
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        console.error("[CHAT_UI] No readable stream");
+        throw new Error("No response body");
+      }
+
+      let assistantMessageAdded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log("[CHAT_UI] SSE stream closed");
+          break;
+        }
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (!line.startsWith("event:")) continue;
+
+          const eventType = line.replace("event:", "").trim();
+          const nextLine = lines[lines.indexOf(line) + 1];
+
+          if (!nextLine?.startsWith("data:")) continue;
+
+          const data = JSON.parse(nextLine.replace("data:", "").trim());
+
+          console.log("[CHAT_UI] SSE event:", eventType, data);
+
+          switch (eventType) {
+            case "progress":
+              setStreamProgress(data.message);
+              break;
+
+            case "assistant_response":
+              if (!assistantMessageAdded) {
+                console.log("[CHAT_UI] Assistant message received");
+
+                const assistantMsg: Message = {
+                  id: `temp-assistant-${Date.now()}`,
+                  chat_session_id: chatSessionId,
+                  role: "assistant",
+                  content_text: data.content_text,
+                  content_json: data.content_json || [],
+                  context_used: data.context_used || [],
+                  created_at: new Date().toISOString(),
+                };
+
+                setMessages((prev) => [...prev, assistantMsg]);
+                assistantMessageAdded = true;
+                setIsAssistantTyping(false);
+                setStreamProgress("");
+              }
+              break;
+
+            case "complete":
+              console.log("[CHAT_UI] SSE completed");
+              console.timeEnd("[CHAT_UI] FIRST_MESSAGE_STREAM");
+              setIsAssistantTyping(false);
+              setStreamProgress("");
+              break;
+
+            case "error":
+              console.error("[CHAT_UI] SSE error event", data);
+              setError(data.message);
+              setIsAssistantTyping(false);
+              setStreamProgress("");
+              break;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[CHAT_UI] Streaming failure", err);
+      setError("Failed to connect to chat service");
+      setIsAssistantTyping(false);
+      setStreamProgress("");
+    }
   };
 
-  // Show full page loader only on initial auth load
-  // if (authLoading) {
-  //   return (
-  //     <div className="flex h-dvh items-center justify-center bg-slate-50">
-  //       <div className="text-center">
-  //         <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center mx-auto mb-4">
-  //           <Bot className="w-6 h-6 text-white animate-pulse" />
-  //         </div>
-  //         <p className="text-slate-600">Loading...</p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
+  /* ───────────── SEND MESSAGE ───────────── */
+  const handleSendInExistingChat = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+
+    if (!input.trim() || isAssistantTyping) {
+      console.warn("[CHAT_UI] Send blocked", {
+        empty: !input.trim(),
+        isAssistantTyping,
+      });
+      return;
+    }
+
+    const userContent = input.trim();
+
+    console.log("[CHAT_UI] Sending message", userContent);
+
+    const optimisticUserMsg: Message = {
+      id: `temp-user-${Date.now()}`,
+      chat_session_id: sessionId,
+      role: "user",
+      content_text: userContent,
+      content_json: [],
+      created_at: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, optimisticUserMsg]);
+    setInput("");
+    setIsAssistantTyping(true);
+    setError(null);
+
+    await handleStreamingQuery(userContent, sessionId, false);
+  };
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-dvh">
@@ -184,9 +282,7 @@ export default function ChatDetailPage() {
         className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth"
       >
         <div className="max-w-2xl mx-auto space-y-4">
-          {/* Loading spinner when fetching messages */}
-          {(loadingMessages || isLoadingFirstResponse) &&
-          messages.length === 0 ? (
+          {loadingMessages && messages.length === 0 ? (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
                 <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
@@ -195,19 +291,13 @@ export default function ChatDetailPage() {
             </div>
           ) : (
             <>
-              {/* Display all messages from the conversation */}
               {messages.map((msg: Message, index) => {
                 const timestamp = new Date(msg.created_at);
                 const isUser = msg.role === "user";
                 const isAssistant = msg.role === "assistant";
 
-                // User Message - content is always a plain string
+                // User Message
                 if (isUser) {
-                  // Ensure we're rendering a string
-                  const userContent =
-                    typeof msg.content === "string"
-                      ? msg.content
-                      : JSON.stringify(msg.content);
                   return (
                     <div
                       key={msg.id || index}
@@ -217,7 +307,7 @@ export default function ChatDetailPage() {
                         <User className="w-4 h-4 text-slate-600" />
                       </div>
                       <div className="max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-blue-600 text-white rounded-br-none">
-                        <p>{userContent}</p>
+                        <p>{msg.content_text}</p>
                         <div className="text-[10px] mt-1 opacity-50 text-right">
                           {timestamp.toLocaleTimeString([], {
                             hour: "2-digit",
@@ -229,12 +319,11 @@ export default function ChatDetailPage() {
                   );
                 }
 
-                // Assistant Message - content is now always an object {answer, suggestions}
-                // after being parsed in getChatMessagesById or coming from API
+                // Assistant Message
                 if (isAssistant) {
-                  // Use parseMessageContent as a safety fallback, but it should always
-                  // receive an object at this point
-                  const parsed = parseMessageContent(msg.content);
+                  const suggestions = Array.isArray(msg.content_json)
+                    ? msg.content_json
+                    : [];
 
                   return (
                     <div
@@ -246,41 +335,30 @@ export default function ChatDetailPage() {
                       </div>
                       <div className="flex flex-col gap-2 max-w-[85%]">
                         <div className="px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-white text-slate-800 border shadow-sm rounded-bl-none">
-                          {parsed.type === "text" ? (
-                            <p>{parsed.text}</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {/* Answer */}
-                              <p>{parsed.answer}</p>
+                          <p>{msg.content_text}</p>
 
-                              {/* Suggestions */}
-                              {parsed.suggestions &&
-                                parsed.suggestions.length > 0 && (
-                                  <div className="mt-2">
-                                    <p className="text-[11px] text-slate-500 mb-1">
-                                      Suggested questions:
-                                    </p>
-                                    <ol className="list-decimal list-inside space-y-1">
-                                      {parsed.suggestions.map(
-                                        (q: string, i: number) => (
-                                          <li key={i}>
-                                            <button
-                                              type="button"
-                                              onClick={() => setInput(q)}
-                                              className="text-blue-600 text-xs hover:underline text-left wrap-break-word"
-                                            >
-                                              {q}
-                                            </button>
-                                          </li>
-                                        )
-                                      )}
-                                    </ol>
-                                    <p className="mt-1 text-[10px] text-slate-400">
-                                      These are AI-generated suggestions and may
-                                      not guarantee exact RAG coverage.
-                                    </p>
-                                  </div>
-                                )}
+                          {suggestions.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-[11px] text-slate-500 mb-1">
+                                Suggested questions:
+                              </p>
+                              <ol className="list-decimal list-inside space-y-1">
+                                {suggestions.map((q: string, i: number) => (
+                                  <li key={i}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setInput(q)}
+                                      className="text-blue-600 text-xs hover:underline text-left"
+                                    >
+                                      {q}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ol>
+                              <p className="mt-1 text-[10px] text-slate-400">
+                                AI-generated suggestions may not guarantee exact
+                                RAG coverage.
+                              </p>
                             </div>
                           )}
 
@@ -300,54 +378,39 @@ export default function ChatDetailPage() {
                               <span>Sources ({msg.context_used.length})</span>
                             </div>
                             <div className="space-y-1">
-                              {(() => {
-                                let contextArray: any[] = [];
-                                try {
-                                  if (Array.isArray(msg.context_used))
-                                    contextArray = msg.context_used;
-                                  else if (typeof msg.context_used === "string")
-                                    contextArray = JSON.parse(msg.context_used);
-                                } catch {
-                                  contextArray = [];
-                                }
-                                return contextArray.map(
-                                  (source: any, idx: number) => {
-                                    const scorePercent = source.score * 100;
-                                    const barColor =
-                                      scorePercent >= 60
-                                        ? "bg-green-500"
-                                        : scorePercent >= 40
-                                        ? "bg-yellow-500"
-                                        : "bg-red-500";
-                                    return (
-                                      <div
-                                        key={source.id || idx}
-                                        className="flex items-center gap-3 text-slate-600"
-                                      >
-                                        <span className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-medium shrink-0 text-blue-700">
-                                          {idx + 1}
-                                        </span>
-                                        <span className="text-xs whitespace-nowrap">
-                                          {scorePercent.toFixed(1)}%
-                                          {source.page &&
-                                            ` • Page ${source.page}`}
-                                        </span>
-                                        <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
-                                          <div
-                                            className={`h-full ${barColor} rounded-full transition-all duration-300`}
-                                            style={{
-                                              width: `${scorePercent}%`,
-                                            }}
-                                            title={`Match confidence: ${scorePercent.toFixed(
-                                              1
-                                            )}%`}
-                                          />
-                                        </div>
+                              {msg.context_used.map(
+                                (source: any, idx: number) => {
+                                  const scorePercent = source.score * 100;
+                                  const barColor =
+                                    scorePercent >= 60
+                                      ? "bg-green-500"
+                                      : scorePercent >= 40
+                                      ? "bg-yellow-500"
+                                      : "bg-red-500";
+                                  return (
+                                    <div
+                                      key={source.id || idx}
+                                      className="flex items-center gap-3 text-slate-600"
+                                    >
+                                      <span className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-medium shrink-0 text-blue-700">
+                                        {idx + 1}
+                                      </span>
+                                      <span className="text-xs whitespace-nowrap">
+                                        {scorePercent.toFixed(1)}%
+                                        {source.page && ` • Page ${source.page}`}
+                                      </span>
+                                      <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full ${barColor} rounded-full transition-all duration-300`}
+                                          style={{
+                                            width: `${scorePercent}%`,
+                                          }}
+                                        />
                                       </div>
-                                    );
-                                  }
-                                );
-                              })()}
+                                    </div>
+                                  );
+                                }
+                              )}
                             </div>
                           </div>
                         )}
@@ -359,17 +422,24 @@ export default function ChatDetailPage() {
                 return null;
               })}
 
-              {/* Typing indicator when assistant is responding */}
+              {/* Typing indicator with progress */}
               {isAssistantTyping && (
                 <div className="flex items-end gap-2 flex-row animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-1 shadow-sm bg-blue-600">
                     <Bot className="w-4 h-4 text-white" />
                   </div>
                   <div className="max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-white text-slate-800 border shadow-sm rounded-bl-none">
-                    <div className="flex gap-1 py-1">
-                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" />
-                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1 py-1">
+                        <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" />
+                        <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                        <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                      </div>
+                      {streamProgress && (
+                        <span className="text-xs text-slate-500">
+                          {streamProgress}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -430,4 +500,3 @@ export default function ChatDetailPage() {
     </div>
   );
 }
-
